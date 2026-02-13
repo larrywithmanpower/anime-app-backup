@@ -12,6 +12,7 @@ interface AnimeItem {
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
 export default function AnimeTracker() {
+  const [hasMounted, setHasMounted] = useState(false);
   const [list, setList] = useState<AnimeItem[]>([]);
   const [initializing, setInitializing] = useState(true);
   const [verifying, setVerifying] = useState(false);
@@ -32,15 +33,20 @@ export default function AnimeTracker() {
   const [loginError, setLoginError] = useState('');
 
   const fetchAccountList = async () => {
-    if (!APPS_SCRIPT_URL) return;
+    if (!APPS_SCRIPT_URL) {
+      console.error('Apps Script URL is missing');
+      setInitializing(false);
+      return;
+    }
     try {
       const res = await fetch(`${APPS_SCRIPT_URL}?action=getSheets`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setAccounts(data);
         const saved = localStorage.getItem('lastAccount');
-        if (saved && data.includes(saved)) {
-          setCurrentAccount(saved);
+        const matched = saved ? data.find((acc: string) => acc.toLowerCase() === saved.toLowerCase()) : null;
+        if (matched) {
+          setCurrentAccount(matched);
           setIsLoggedIn(true);
         }
       }
@@ -53,7 +59,10 @@ export default function AnimeTracker() {
 
   const fetchData = async (sheetOverride?: string) => {
     const sheet = sheetOverride || currentAccount;
-    if (!sheet || !APPS_SCRIPT_URL) return;
+    if (!sheet || !APPS_SCRIPT_URL) {
+      setInitializing(false);
+      return;
+    }
 
     setRefreshing(true);
     try {
@@ -86,6 +95,7 @@ export default function AnimeTracker() {
   };
 
   useEffect(() => {
+    setHasMounted(true);
     fetchAccountList();
   }, []);
 
@@ -355,10 +365,21 @@ export default function AnimeTracker() {
     }
   };
 
+  if (!hasMounted) return null;
+
   if (initializing) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-black text-white">
-        <div className="text-zinc-600 font-bold uppercase tracking-[0.3em] text-[10px] animate-pulse">系統初始化中...</div>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-6 text-center">
+        <div className="w-8 h-8 border-2 border-zinc-800 border-t-white rounded-full animate-spin mb-4" />
+        <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em]">系統初始化中...</p>
+        {!APPS_SCRIPT_URL && (
+          <div className="mt-8 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl max-w-xs">
+            <p className="text-red-400 text-xs font-bold mb-2">設定錯誤</p>
+            <p className="text-zinc-500 text-[9px] font-medium leading-relaxed">
+              請檢查您的 .env.local 是否已正確設定 NEXT_PUBLIC_APPS_SCRIPT_URL
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -467,14 +488,20 @@ export default function AnimeTracker() {
           <h1 className="text-3xl font-black tracking-tighter mb-1.5 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
             TRACKER
           </h1>
-          <div className="flex items-center gap-2">
-            <span className="text-zinc-500 text-[10px] font-black tracking-widest">使用者: <span className="text-zinc-300">{currentAccount}</span></span>
-            <button
-              onClick={handleLogout}
-              className="text-[9px] font-black text-red-500/60 hover:text-red-400 uppercase tracking-widest border border-red-500/20 rounded-full px-2 py-0.5 active:scale-90 transition-all"
-            >
-              登出
-            </button>
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest leading-none">使用者帳戶</span>
+              <button
+                onClick={handleLogout}
+                className="text-[8px] font-black text-red-500/50 hover:text-red-400 uppercase tracking-widest px-1.5 py-0.5 active:scale-95 transition-all"
+              >
+                [ 登出 ]
+              </button>
+            </div>
+
+            <div className="text-lg font-black tracking-tight text-white px-0.5 leading-none">
+              {currentAccount}
+            </div>
           </div>
         </div>
 
@@ -750,8 +777,19 @@ export default function AnimeTracker() {
         </div>
       )}
 
-      {list.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-32 px-6">
+      {/* Centered Loading Overlay for initial data fetch or manual refresh */}
+      {refreshing && list.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-32 px-6 animate-in fade-in duration-500">
+          <div className="w-12 h-12 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin mb-6" />
+          <div className="text-center space-y-2">
+            <span className="block text-zinc-400 font-black text-lg tracking-tight">同步數據中...</span>
+            <span className="block text-zinc-600 font-bold text-[10px] uppercase tracking-[0.2em]">請稍候，正在連線至 Google Sheets</span>
+          </div>
+        </div>
+      )}
+
+      {list.length === 0 && !refreshing && (
+        <div className="flex flex-col items-center justify-center py-32 px-6 animate-in zoom-in-95 duration-700">
           <button
             onClick={() => setShowAddItem(true)}
             className="group relative flex flex-col items-center gap-6 active:scale-95 transition-all duration-300"

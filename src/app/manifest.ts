@@ -1,5 +1,7 @@
 import { MetadataRoute } from 'next';
 
+export const dynamic = 'force-static';
+
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: '追番進度管理',
@@ -10,6 +12,11 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#000000',
     theme_color: '#000000',
     icons: [
+      {
+        src: '/icon.svg',
+        sizes: 'any',
+        type: 'image/svg+xml',
+      },
       {
         src: '/icon.png',
         sizes: '192x192',
