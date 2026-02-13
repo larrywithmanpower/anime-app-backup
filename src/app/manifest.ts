@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: '追番進度管理',
     short_name: '追番進度',
     description: 'Anime Tracker - 專屬您的追番進度管理',
-    start_url: '/anime-app-backup/',
+    start_url: '.',
     display: 'standalone',
     background_color: '#000000',
     theme_color: '#000000',
