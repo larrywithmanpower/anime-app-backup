@@ -6,8 +6,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: '追番進度管理',
     short_name: '追番進度',
-    description: 'iPhone 13 mini 優化版追番進度管理工具',
-    start_url: '/',
+    description: 'Anime Tracker - 專屬您的追番進度管理',
+    start_url: '/anime-app-backup/',
     display: 'standalone',
     background_color: '#000000',
     theme_color: '#000000',
