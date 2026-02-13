@@ -6,6 +6,7 @@ const nextConfig = {
   reactCompiler: true,
   output: 'export',
   basePath: isProd ? `/${repoName}` : '',
+  trailingSlash: true,
   images: {
     unoptimized: true,
   },
