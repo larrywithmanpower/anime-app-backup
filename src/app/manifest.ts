@@ -13,17 +13,17 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: '#000000',
     icons: [
       {
-        src: '/icon.svg',
+        src: '/anime-app-backup/icon.svg',
         sizes: 'any',
         type: 'image/svg+xml',
       },
       {
-        src: '/icon.png',
+        src: '/anime-app-backup/icon.png',
         sizes: '192x192',
         type: 'image/png',
       },
       {
-        src: '/icon-512.png',
+        src: '/anime-app-backup/icon-512.png',
         sizes: '512x512',
         type: 'image/png',
       },

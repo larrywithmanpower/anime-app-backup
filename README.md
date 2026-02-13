@@ -1,5 +1,7 @@
 # 📺 Anime Tracker (Next.js + Google Sheets)
 
+**🔗 Live Demo:** [https://larrywithmanpower.github.io/anime-app-backup/](https://larrywithmanpower.github.io/anime-app-backup/)
+
 這是一個極簡、美觀且強大的動畫追蹤應用程式。它使用 **Next.js** 驅動前端，並以 **Google Sheets** 作為資料庫（透過 Google Apps Script 連接）。
 
 ## ✨ 功能亮點
