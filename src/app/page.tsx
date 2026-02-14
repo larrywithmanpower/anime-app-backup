@@ -119,6 +119,7 @@ export default function AnimeTracker() {
     setIsCheckingAI(true);
     try {
       const data = await checkAnimeUpdates(trackingList.map(item => ({
+        id: item.rowNumber,
         name: item.name,
         current: item.progress
       })));
@@ -130,7 +131,11 @@ export default function AnimeTracker() {
         const failedNames: string[] = [];
 
         setList(prev => prev.map(item => {
-          const update = data.updates.find((u: any) => u.name === item.name);
+          // 優先使用 Row ID 進行匹配 (解決繁簡體與名稱不一致問題)
+          const update = data.updates.find((u: any) =>
+            String(u.id) === String(item.rowNumber) || u.name === item.name
+          );
+
           if (update) {
             if (update.latest === "搜尋失敗") {
               failedCount++;
@@ -156,13 +161,23 @@ export default function AnimeTracker() {
 
         // Batch update to GAS so it persists
         if (APPS_SCRIPT_URL) {
+          // Map updates to include row numbers for direct addressing
+          const updatesWithRows = data.updates.map((u: any) => {
+            const localItem = listToUse.find(item => item.name === u.name);
+            return {
+              name: u.name,
+              latest: u.latest,
+              row: localItem ? localItem.rowNumber : undefined
+            };
+          });
+
           const gasRes = await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
             redirect: 'follow',
             body: JSON.stringify({
               action: 'updateLatestBatch',
               sheet: currentAccount,
-              updates: data.updates
+              updates: updatesWithRows
             }),
           });
           await gasRes.json();
@@ -732,6 +747,7 @@ export default function AnimeTracker() {
               </svg>
             </button>
 
+            {/* AI Check Button Hidden
             <button
               onClick={() => checkAIProgress()}
               disabled={isCheckingAI || refreshing}
@@ -753,6 +769,7 @@ export default function AnimeTracker() {
                 <path d="M16.24 7.76l2.83-2.83"></path>
               </svg>
             </button>
+            */}
 
             <button
               onClick={handleManualRefresh}
@@ -913,6 +930,7 @@ export default function AnimeTracker() {
                 <div className="w-8 h-8 rounded-lg bg-red-600/20 flex items-center justify-center text-red-500 shrink-0 text-[10px] font-bold">OUT</div>
                 <p>點擊右上角的 <span className="text-white">登出</span> 即可更換登入不同的帳號。</p>
               </div>
+              {/*
               <div className="flex gap-3 items-center">
                 <div className="w-8 h-8 rounded-lg bg-yellow-600/20 flex items-center justify-center text-yellow-400 shrink-0">
                   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
@@ -925,6 +943,7 @@ export default function AnimeTracker() {
                 </div>
                 <p>點擊右上角 <span className="text-white">紫色 AI 按鈕</span>，自動檢查全網最新集數並顯示紅色呼吸燈。</p>
               </div>
+              */}
               <div className="flex gap-3 items-center">
                 <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 text-[10px] font-bold">...</div>
                 <p>名稱太長會縮略，<span className="text-white">直接點擊標題</span> 即可展開查看完整內容。</p>
@@ -981,10 +1000,13 @@ export default function AnimeTracker() {
                       title={item.name}
                     >
                       <span className={expandedItems[item.rowNumber] ? 'break-words' : 'truncate'}>{item.name}</span>
+                      {/* AI Red Dot Hidden
                       {hasNewEpisode(item.latest, item.progress) && (
                         <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-pulse shrink-0 border-2 border-zinc-900"></span>
                       )}
+                      */}
                     </div>
+                    {/* Star Button Hidden
                     <button
                       onClick={() => handleToggleFavorite(item)}
                       className={`p-1 transition-all shrink-0 active:scale-90 ${item.favorite ? 'text-yellow-400' : 'text-zinc-700 hover:text-zinc-500'}`}
@@ -994,6 +1016,7 @@ export default function AnimeTracker() {
                         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
                       </svg>
                     </button>
+                    */}
                     <button
                       onClick={() => {
                         setItemToRename(item);
@@ -1013,6 +1036,7 @@ export default function AnimeTracker() {
                       <span className="w-1 h-1 rounded-full bg-blue-500/40"></span>
                       {item.date ? (item.date.includes('T') ? new Date(item.date).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : item.date) : '未知'}
                     </div>
+                    {/* Latest Info Hidden
                     {item.latest ? (
                       hasNewEpisode(item.latest, item.progress) ? (
                         <div className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
@@ -1029,6 +1053,7 @@ export default function AnimeTracker() {
                         </div>
                       )
                     ) : null}
+                    */}
                   </div>
                 </div>
 

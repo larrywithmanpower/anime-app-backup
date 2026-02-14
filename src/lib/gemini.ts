@@ -4,9 +4,8 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const MODELS = [
   "gemini-2.5-flash-lite",
   "gemini-2.5-flash",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b"
+  "gemini-3.0-flash",
+  "gemini-1.5-flash"
 ];
 
 const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
@@ -23,11 +22,13 @@ if (typeof window !== "undefined") {
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export interface AnimeCheckRequest {
+  id: string | number;
   name: string;
   current: string;
 }
 
 export interface AnimeUpdate {
+  id: string | number;
   name: string;
   latest: string;
 }
@@ -47,10 +48,14 @@ export async function checkAnimeUpdates(animations: AnimeCheckRequest[]): Promis
 1. **格式繼承 (極重要)**：你必須觀察「目前進度」的文字格式。如果目前進度是「第 1 季 第 160 集」，回傳時必須也使用「第 X 季 第 Y 集」的格式，僅更動數字。如果格式是純集數「160」，就回傳純數字。
 2. **取最高累計值**：忽略官方分季標籤，抓取網路上能找到的最高「總累計集數」(如將 1 季 160 集更正為 1 季 210 集)。只要數值較大且已播出，就採用。
 3. **區分版本**：只要是影片形式的已播出內容，數值最高的即為最新。嚴禁回報預告、小說章節。
-4. **輸出限制**：僅回傳 JSON 格式，不准有任何其他文字。格式：{"updates": [{"name": "名稱", "latest": "相同格式的最新集數"}]}
+4. **輸出限制**：僅回傳 JSON 格式，不准有任何其他文字。格式：{"updates": [{"id": "ID (保持原樣)", "name": "名稱", "latest": "相同格式的最新集數"}]}
+5. **ID 對應 (核心)**：回傳的 \`id\` 必須與輸入清單中的 ID 完全一致 (String/Number)，這是寫入資料庫的唯一依據。不要更改它。
+5. **名稱精確性 (關鍵)**：
+   - **搜尋階段**：請優先使用清單上的「準確名稱」進行搜尋。若該名稱為繁體且找不到結果，可嘗試搜尋其簡體版本（例如「凡人修仙傳」->「凡人修仙传」）以獲取資料。
+6. **排除干擾**：搜尋時請特別留意排除「預告」、「解說」、「Reaction」、「二創」等非正片內容，只抓取「正片」或「已播出」的集數。對於「凡人修仙傳」等持續更新的長篇動畫，請特別注意區分「重製版」與「最新進度」。
 
 動畫清單與目前進度（請參考格式）：
-${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
+${animations.map((a) => `ID: ${a.id} | ${a.name} (目前: ${a.current})`).join("\n")}`;
 
   let lastError: any = null;
 

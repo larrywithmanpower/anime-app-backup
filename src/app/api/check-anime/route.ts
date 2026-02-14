@@ -33,10 +33,15 @@ export async function POST(req: Request) {
 3. **參考目前進度**：我會提供目前的集數。如果搜尋到的最新集數等於或小於目前進度，請回報目前進度的數字。
 4. **模糊搜尋**：如果搜尋不到精確名稱，請嘗試搜尋系列名稱（例如「仙逆」搜尋「仙逆 動畫」）。
 5. **若完全查不到資料**：如果 Google 搜尋不到任何確定的已播出集數資訊，請在 latest 欄位填入「搜尋失敗」。
-6. 僅回傳 JSON 格式：{"updates": [{"name": "名稱", "latest": "數字或狀態"}]}。name 必須與清單完全一致。
+6. **名稱與回報規範**：
+   - 搜尋時請優先使用清單提供的名稱。
+   - **回報的 name 必須與清單完全一致**（嚴禁繁簡轉換）。
+   - **ID 必須原樣回傳**：\`id\` 是資料庫索引，請務必將看到的 ID 填回對應欄位。
+   - 請排除「預告」、「解說」影片，專注於「正片」資訊。
+7. 僅回傳 JSON 格式：{"updates": [{"id": "ID", "name": "名稱", "latest": "數字或狀態"}]}。
 
 清單（包含目前進度）：
-${animations.map((a: any) => `${a.name} (目前: ${a.current})`).join("\n")}`;
+${animations.map((a: any) => `ID: ${a.id} | ${a.name} (目前: ${a.current})`).join("\n")}`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;

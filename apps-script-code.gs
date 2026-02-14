@@ -179,6 +179,18 @@ function updateLatestBatch(ss, sheetName, updates) {
   
   for (var i = 0; i < updates.length; i++) {
     var update = updates[i];
+    
+    // 優先使用 Row Number 直接定位 (更安全，不怕改名或繁簡差異)
+    if (update.row) {
+      var r = parseInt(update.row);
+      if (r > 1) { // 確保不是標題列
+         sheet.getRange(r, 4).setValue(update.latest); 
+         sheet.getRange(r, 1).setValue(new Date());
+         continue; // 已處理，跳過名稱比對
+      }
+    }
+
+    // 舊版兼容：名稱比對 (Fallback)
     for (var j = 1; j < data.length; j++) {
       // 使用 trim 確保名稱匹配精確
       if (String(data[j][1]).trim() === String(update.name).trim()) {
