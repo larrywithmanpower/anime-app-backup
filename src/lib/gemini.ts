@@ -31,24 +31,16 @@ export interface AIResponse {
  */
 export async function checkAnimeUpdates(animations: AnimeCheckRequest[]): Promise<AIResponse> {
   const today = new Date().toLocaleDateString('zh-TW');
-  const prompt = `你是一個專業的影視數據抓取助手。
-今天是 ${today}。
-任務：利用 Google 搜尋查詢清單中作品的「已播出」最新集數。
+  const prompt = `今天是 ${today}。你的任務是利用 Google 搜尋下列動畫在「劇迷 Gimy」、「YouTube」或「age動漫」等網站上的最新已播出集數。
 
-核心搜查邏輯 (極重要)：
-1. **打破官方迷思**：許多動畫 (尤其是國漫) 在官方平台的集數標記是「當季進度」(如 160)，但在第三方站點、YouTube 或海外版則是「總累進集數」(如 210)。**你必須搜尋並回報網路上能找到的最高「已播出」數字**。
-2. **優先搜尋關鍵字**：除了搜尋作品名，請嘗試搭配「最新集數」、「總集數」、「劇迷」、「Gimy」、「YouTube」進行核對。
-3. **區分版本**：只要是「已播出」的內容（不論是特典、特別篇或總集數標記），只要數值較大就採用。
-4. **排除誤區**：絕對不要把「小說章節」或「漫畫話數」當作動畫集數。動畫集數通常伴隨著「集」、「EP」或「影片長度」。
+極重要邏輯：
+1. **取全國網最高值**：不要理會官方(如騰訊)標註的「季集數」(如 160)，必須回傳網路上能找到的最高「總累計集數」(如 210)。只要數值較大且已播出，就採用。
+2. **區分版本**：只要是影片形式的已播出內容，數值最高的即為最新。嚴禁回報預告、小說章節。
+3. **嚴格 JSON 格式**：僅回傳 JSON 格式，不准有任何其他文字或 Markdown 標籤。
 
-規則：
-1. **強制採用最高值**：如果搜尋結果有衝突，請無條件採用數值最大的「已播影片」集數。例如：搜尋到 160 與 210，且 210 標明為影片或在影視站上架，就填 210。
-2. **嚴禁預測未來**：只回報「現在已經看得到」的集數，不要回報預告資訊。
-3. **格式一致性**：回報格式必須與目前進度（如「第 X 季 第 Y 集」）完全一致。
-4. **參考目前進度**：如果搜尋到的最大值小於目前進度，則維持目前進度。
-5. 僅回傳純 JSON 格式：{"updates": [{"name": "名稱", "latest": "數字或狀態"}]}。
+輸出格式：{"updates": [{"name": "名稱", "latest": "數字或狀態"}]}
 
-清單：
+動畫清單與目前進度：
 ${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
 
   let lastError: any = null;
@@ -71,7 +63,8 @@ ${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
         temperature: 0.1,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 2048,
+        maxOutputTokens: 4096, // 提高上限避免碎片化輸出
+        // 注意：啟用 Google Search Tool 時暫不支援 responseMimeType: "application/json"
       };
 
       const result = await model.generateContent({
@@ -82,29 +75,68 @@ ${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
       const response = await result.response;
       let text = response.text();
 
-      // 清理可能的 JSON Markdown 標籤
-      const cleanedText = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(cleanedText) as AIResponse;
+      // 第一步：清空所有 Markdown 代碼塊標記
+      let sanitizedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-      // 簡單校驗回傳格式
-      if (!parsed.updates || !Array.isArray(parsed.updates)) {
-        throw new Error("AI 回傳格式不正確");
+      // 第二步：「括號平衡解析」技術 - 尋找第一個完整的 JSON 物件區塊
+      // 這樣即便 AI 在後面重複輸出或產生雜訊，我們也只取第一個合法的 JSON 塊
+      let balancedJson = "";
+      const startIdx = sanitizedText.indexOf('{');
+      if (startIdx !== -1) {
+        let depth = 0;
+        for (let i = startIdx; i < sanitizedText.length; i++) {
+          if (sanitizedText[i] === '{') depth++;
+          else if (sanitizedText[i] === '}') depth--;
+
+          if (depth === 0) {
+            balancedJson = sanitizedText.substring(startIdx, i + 1);
+            break;
+          }
+        }
       }
 
-      return parsed;
+      // 如果沒找到平衡括號，則回退到原本的邏輯
+      const finalJson = balancedJson || sanitizedText;
+
+      try {
+        const parsed = JSON.parse(finalJson) as AIResponse;
+
+        if (!parsed.updates || !Array.isArray(parsed.updates)) {
+          throw new Error("AI 回傳格式不正確");
+        }
+
+        return parsed;
+      } catch (parseError) {
+        console.error("JSON Parse Error. Raw:", text, "Extracted:", finalJson);
+        throw new Error("AI 回傳了損壞的格式，正在嘗試切換模型重試...");
+      }
 
     } catch (error: any) {
       console.warn(`Model ${modelName} failed, trying next... Error:`, error.message);
-      lastError = error;
 
+      let friendlyMessage = error.message;
       const errMsg = error.message?.toLowerCase() || "";
-      // 如果是 429, 503 或配額問題，則繼續嘗試下一個模型
-      if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("too many")) {
+
+      // 錯誤訊息中文化轉譯層
+      if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("too many requests")) {
+        friendlyMessage = `模型 ${modelName} 回報次數已上限`;
+      } else if (errMsg.includes("503") || errMsg.includes("unavailable")) {
+        friendlyMessage = `模型 ${modelName} 暫時繁忙`;
+      } else if (errMsg.includes("403") || errMsg.includes("api key") || errMsg.includes("invalid")) {
+        friendlyMessage = "API 金鑰無效或受限";
+      } else if (errMsg.includes("json") || errMsg.includes("format") || errMsg.includes("parse")) {
+        friendlyMessage = "AI 回傳格式異常";
+      }
+
+      lastError = new Error(friendlyMessage);
+
+      // 如果是配額或繁忙問題，則繼續嘗試下一個模型
+      if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("too many") || friendlyMessage.includes("格式異常")) {
         continue;
       }
 
       // 其他嚴重錯誤則直接拋出
-      throw error;
+      throw lastError;
     }
   }
 

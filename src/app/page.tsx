@@ -38,6 +38,7 @@ export default function AnimeTracker() {
   const [aiUpdatesFound, setAiUpdatesFound] = useState(false);
   const [failedAnimeNames, setFailedAnimeNames] = useState<string[]>([]);
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+  const [aiGlobalError, setAiGlobalError] = useState<string | null>(null);
 
   const fetchAccountList = async (isSilent = false) => {
     if (!APPS_SCRIPT_URL) {
@@ -167,8 +168,10 @@ export default function AnimeTracker() {
           await gasRes.json();
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("AI Check failed:", err);
+      // Notify user when all models fail
+      setAiGlobalError(err.message || "AI 服務暫時無法使用，請稍後再試。");
     } finally {
       setIsCheckingAI(false);
     }
@@ -236,12 +239,7 @@ export default function AnimeTracker() {
 
   useEffect(() => {
     if (isLoggedIn && currentAccount) {
-      fetchData().then((data) => {
-        // Only auto-check if we are not already checking
-        if (!isCheckingAI && data && data.length > 0) {
-          checkAIProgress(data);
-        }
-      });
+      fetchData();
     }
   }, [isLoggedIn, currentAccount]);
 
@@ -258,6 +256,13 @@ export default function AnimeTracker() {
       return () => clearTimeout(timer);
     }
   }, [failedAnimeNames]);
+
+  useEffect(() => {
+    if (aiGlobalError) {
+      const timer = setTimeout(() => setAiGlobalError(null), 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [aiGlobalError]);
 
   const handleLogin = async () => {
     const name = loginName.trim();
@@ -671,9 +676,9 @@ export default function AnimeTracker() {
       {/* Background decoration - confined to prevent horizontal scroll */}
       <div className="absolute top-0 left-0 right-0 h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
 
-      <header className="sticky top-0 z-50 -mx-3 px-4 py-4 mb-6 bg-black/60 backdrop-blur-xl border-b border-white/5 flex items-start justify-between">
+      <header className="sticky top-0 z-50 -mx-3 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 mb-6 bg-black/60 backdrop-blur-xl border-b border-white/5 flex items-start justify-between">
         <div className="flex-1 min-w-0">
-          <h1 className="text-3xl font-black tracking-tighter mb-1.5 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tighter mb-1 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
             TRACKER
           </h1>
           <div className="flex flex-col gap-1.5">
@@ -771,6 +776,15 @@ export default function AnimeTracker() {
           <div className="bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-400/30 backdrop-blur-md">
             <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
             <p className="text-sm font-black tracking-tight">發現新集數更新！</p>
+          </div>
+        </div>
+      )}
+
+      {aiGlobalError && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] animate-in slide-in-from-top-4 duration-500 w-[90%] max-w-xs">
+          <div className="bg-zinc-900 text-white px-5 py-3.5 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-500/50 backdrop-blur-xl ring-1 ring-red-500/20">
+            <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center text-red-500 shrink-0">!</div>
+            <p className="text-xs font-bold leading-tight">{aiGlobalError}</p>
           </div>
         </div>
       )}
