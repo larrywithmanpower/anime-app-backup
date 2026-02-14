@@ -50,6 +50,14 @@ function doPost(e) {
     if (data.action === "deleteAccount") {
       return response(deleteAccount(ss, data.sheet));
     }
+
+    if (data.action === "updateLatestBatch") {
+      return response(updateLatestBatch(ss, data.sheet, data.updates));
+    }
+
+    if (data.action === "toggleFavorite") {
+      return response(toggleFavorite(ss, data.sheet, data.row, data.favorite));
+    }
     
     throw new Error("未知動作: " + data.action);
 
@@ -67,15 +75,30 @@ function listAllSheets(ss) {
 function getSheetData(ss, sheetName) {
   var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
   if (!sheet) throw new Error("找不到分頁: " + (sheetName || "第一個分頁"));
-  return sheet.getDataRange().getValues();
+  
+  // 強制檢查第一列 A1 到 E1
+  var headerRange = sheet.getRange(1, 1, 1, 5);
+  var headers = headerRange.getValues()[0];
+  
+  // 如果最後一格不是「追蹤」，強制更新整行表頭
+  if (headers[4] !== "追蹤") {
+    var standardHeaders = [["最後更新時間", "作品名稱", "目前進度", "最新進度(AI)", "追蹤"]];
+    headerRange.setValues(standardHeaders);
+    sheet.setFrozenRows(1); // 確保標題列被凍結
+  }
+  
+  // 強制返回 A 到 E 共 5 欄數據，確保前端索引不偏移
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 1) return [];
+  return sheet.getRange(1, 1, lastRow, 5).getValues();
 }
 
 function createNewAccount(ss, name) {
   if (ss.getSheetByName(name)) throw new Error("帳號 「" + name + "」 已經存在");
   var newSheet = ss.insertSheet(name);
-  // 固定標題列：最後更新時間, 作品名稱, 目前進度
-  var headers = [["最後更新時間", "作品名稱", "目前進度"]];
-  newSheet.getRange(1, 1, 1, 3).setValues(headers);
+  // 固定標題列：最後更新時間, 作品名稱, 目前進度, 最新進度(AI), 追蹤
+  var headers = [["最後更新時間", "作品名稱", "目前進度", "最新進度(AI)", "追蹤"]];
+  newSheet.getRange(1, 1, 1, 5).setValues(headers);
   newSheet.setFrozenRows(1); // 凍結第一列
   return {success: true, name: name};
 }
@@ -143,6 +166,49 @@ function deleteItem(ss, sheetName, row) {
   return {success: true};
 }
 
+function updateLatestBatch(ss, sheetName, updates) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error("找不到分頁: " + sheetName);
+  
+  var data = sheet.getDataRange().getValues();
+  
+  // 確保表格至少有 5 欄 (A:E)
+  if (sheet.getLastColumn() < 5) {
+     sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn());
+  }
+  
+  for (var i = 0; i < updates.length; i++) {
+    var update = updates[i];
+    for (var j = 1; j < data.length; j++) {
+      // 使用 trim 確保名稱匹配精確
+      if (String(data[j][1]).trim() === String(update.name).trim()) {
+        sheet.getRange(j + 1, 4).setValue(update.latest); // 最新進度 (AI)
+        sheet.getRange(j + 1, 1).setValue(new Date());   // 最後更新時間
+        break;
+      }
+    }
+  }
+  return {success: true};
+}
+
+function toggleFavorite(ss, sheetName, row, isFavorite) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) throw new Error("找不到分頁: " + sheetName);
+  
+  var rowIndex = parseInt(row);
+  if (rowIndex <= 1) throw new Error("無效的操作");
+  
+  // 第 5 欄為追蹤狀態 (TRUE/FALSE)
+  sheet.getRange(rowIndex, 5).setValue(isFavorite ? "TRUE" : "FALSE");
+
+  // 如果是取消追蹤，同時清空最新進度 (第 4 欄)
+  if (!isFavorite) {
+    sheet.getRange(rowIndex, 4).clearContent();
+  }
+  
+  return {success: true, favorite: isFavorite};
+}
+
 function response(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
@@ -151,5 +217,5 @@ function response(data) {
 // --- 測試用函數 (可在開發者編輯器手動執行點擊「執行」來測試) ---
 function TEST_LIST_SHEETS() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  Logger.log("所有分頁: " + listAllSheets(ss));
+
 }

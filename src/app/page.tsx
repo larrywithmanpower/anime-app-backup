@@ -7,6 +7,8 @@ interface AnimeItem {
   date: string;
   name: string;
   progress: string;
+  latest?: string; // AI detected latest episode
+  favorite?: boolean; // Tracking status
 }
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
@@ -31,6 +33,10 @@ export default function AnimeTracker() {
   const [renameValue, setRenameValue] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginError, setLoginError] = useState('');
+  const [isCheckingAI, setIsCheckingAI] = useState(false);
+  const [aiUpdatesFound, setAiUpdatesFound] = useState(false);
+  const [failedAnimeNames, setFailedAnimeNames] = useState<string[]>([]);
+  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
 
   const fetchAccountList = async (isSilent = false) => {
     if (!APPS_SCRIPT_URL) {
@@ -83,11 +89,16 @@ export default function AnimeTracker() {
             date: row[0] || '',
             name: row[1] || '',
             progress: row[2] || '',
+            latest: row[3] || '',
+            favorite: row[4] === true || row[4] === 'TRUE',
           })).filter(item => item.name);
         setList(mappedData);
+        return mappedData;
       }
+      return [];
     } catch (err) {
       console.error(err);
+      return [];
     } finally {
       setRefreshing(false);
       setInitializing(false);
@@ -96,6 +107,122 @@ export default function AnimeTracker() {
 
   const handleManualRefresh = () => {
     fetchData();
+    setAiUpdatesFound(false);
+  };
+
+  const checkAIProgress = async (listOverride?: AnimeItem[]) => {
+    const listToUse = listOverride || list;
+    const trackingList = listToUse.filter(item => item.favorite);
+    if (trackingList.length === 0 || isCheckingAI) return;
+    setIsCheckingAI(true);
+    try {
+      const response = await fetch('/api/check-anime', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ animations: trackingList.map(item => ({ name: item.name, current: item.progress })) }),
+      });
+      const data = await response.json();
+
+      if (data.error) {
+        console.error("AI Check Error from API:", data.error);
+        return;
+      }
+
+      if (data.updates) {
+        // Update local state temporarily
+        let foundNew = false;
+        let failedCount = 0;
+        const failedNames: string[] = [];
+
+        setList(prev => prev.map(item => {
+          const update = data.updates.find((u: any) => u.name === item.name);
+          if (update) {
+            if (update.latest === "搜尋失敗") {
+              failedCount++;
+              failedNames.push(item.name);
+              return item; // Keep current latest if failed
+            }
+            // Check if this is actually newer than current progress
+            if (hasNewEpisode(update.latest, item.progress)) {
+              foundNew = true;
+            }
+            return { ...item, latest: update.latest };
+          }
+          return item;
+        }));
+
+        if (failedNames.length > 0) {
+          setFailedAnimeNames(failedNames);
+        }
+
+        if (foundNew) {
+          setAiUpdatesFound(true);
+        }
+
+        // Batch update to GAS so it persists
+        if (APPS_SCRIPT_URL) {
+          const gasRes = await fetch(APPS_SCRIPT_URL, {
+            method: 'POST',
+            redirect: 'follow',
+            body: JSON.stringify({
+              action: 'updateLatestBatch',
+              sheet: currentAccount,
+              updates: data.updates
+            }),
+          });
+          await gasRes.json();
+        }
+      }
+    } catch (err) {
+      console.error("AI Check failed:", err);
+    } finally {
+      setIsCheckingAI(false);
+    }
+  };
+
+  // Helper to compare progress with AI latest (robust string comparison)
+  const hasNewEpisode = (latest?: string, progress?: string) => {
+    if (!latest || !progress) return false;
+    const l = String(latest).trim();
+    const p = String(progress).trim();
+    // Compare as numbers if possible, otherwise string mismatch
+    if (!isNaN(Number(l)) && !isNaN(Number(p))) {
+      return Number(l) > Number(p);
+    }
+    return l !== p;
+  };
+
+  const applyAIUpdates = async () => {
+    if (!APPS_SCRIPT_URL) return;
+    setRefreshing(true);
+    try {
+      // Find items where latest is a number and different from current progress
+      const updates = list.filter(item =>
+        item.latest &&
+        /^\d+$/.test(item.latest) &&
+        item.latest !== item.progress
+      );
+
+      for (const item of updates) {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          redirect: 'follow',
+          body: JSON.stringify({
+            action: 'update',
+            row: item.rowNumber,
+            progress: item.latest,
+            sheet: currentAccount
+          }),
+        });
+      }
+
+      setAiUpdatesFound(false);
+      await fetchData();
+    } catch (err) {
+      console.error("Failed to apply updates:", err);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   useEffect(() => {
@@ -115,9 +242,28 @@ export default function AnimeTracker() {
 
   useEffect(() => {
     if (isLoggedIn && currentAccount) {
-      fetchData();
+      fetchData().then((data) => {
+        // Only auto-check if we are not already checking
+        if (!isCheckingAI && data && data.length > 0) {
+          checkAIProgress(data);
+        }
+      });
     }
   }, [isLoggedIn, currentAccount]);
+
+  useEffect(() => {
+    if (aiUpdatesFound) {
+      const timer = setTimeout(() => setAiUpdatesFound(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [aiUpdatesFound]);
+
+  useEffect(() => {
+    if (failedAnimeNames.length > 0) {
+      const timer = setTimeout(() => setFailedAnimeNames([]), 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [failedAnimeNames]);
 
   const handleLogin = async () => {
     const name = loginName.trim();
@@ -206,14 +352,14 @@ export default function AnimeTracker() {
     setRefreshing(true);
     try {
       const requestBody = { action: 'addItem', sheet: currentAccount, name: newItemName.trim() };
-      console.log('Adding item request:', requestBody);
+
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         redirect: 'follow',
         body: JSON.stringify(requestBody),
       });
       const result = await res.json();
-      console.log('Adding item response:', result);
+
       if (res.ok && !result.error) {
         setNewItemName('');
         setShowAddItem(false);
@@ -291,7 +437,7 @@ export default function AnimeTracker() {
     if (!itemToRename || !renameValue.trim() || !APPS_SCRIPT_URL) return;
     setRefreshing(true);
     try {
-      console.log('Rename payload:', { row: itemToRename.rowNumber, name: renameValue.trim() });
+
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST',
         redirect: 'follow',
@@ -303,7 +449,7 @@ export default function AnimeTracker() {
         }),
       });
       const result = await res.json();
-      console.log('Rename API Result:', result);
+
       if (res.ok && !result.error) {
         setItemToRename(null);
         fetchData();
@@ -360,6 +506,40 @@ export default function AnimeTracker() {
     if (current <= 0) return;
     const newProgress = (current - 1).toString();
     handleProgressUpdate(item, newProgress);
+  };
+
+  const toggleExpand = (rowNumber: number) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [rowNumber]: !prev[rowNumber]
+    }));
+  };
+
+  const handleToggleFavorite = async (item: AnimeItem) => {
+    if (!APPS_SCRIPT_URL) return;
+    const newFavorite = !item.favorite;
+
+    // Update local state first
+    setList(prev => prev.map(i =>
+      i.rowNumber === item.rowNumber
+        ? { ...i, favorite: newFavorite, latest: newFavorite ? i.latest : '' }
+        : i
+    ));
+
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        redirect: 'follow',
+        body: JSON.stringify({
+          action: 'toggleFavorite',
+          sheet: currentAccount,
+          row: item.rowNumber,
+          favorite: newFavorite
+        }),
+      });
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
+    }
   };
 
   const handleInputChange = (item: AnimeItem, value: string) => {
@@ -493,11 +673,11 @@ export default function AnimeTracker() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-3 pb-24 relative overflow-x-hidden">
-      {/* Background decoration */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[150%] h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
+    <main className="min-h-screen bg-black text-white p-3 pb-24 relative">
+      {/* Background decoration - confined to prevent horizontal scroll */}
+      <div className="absolute top-0 left-0 right-0 h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
 
-      <header className="mb-8 px-1 flex items-start justify-between">
+      <header className="sticky top-0 z-50 -mx-3 px-4 py-4 mb-6 bg-black/60 backdrop-blur-xl border-b border-white/5 flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-black tracking-tighter mb-1.5 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
             TRACKER
@@ -520,12 +700,14 @@ export default function AnimeTracker() {
         </div>
 
         <div className="flex flex-col items-end gap-2.5">
-          <button
-            onClick={handleLogout}
-            className="text-[8px] font-black text-blue-500/50 hover:text-blue-400 uppercase tracking-widest px-1.5 py-1 active:scale-95 transition-all"
-          >
-            [ 登出 ]
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleLogout}
+              className="text-[8px] font-black text-blue-500/50 hover:text-blue-400 uppercase tracking-widest px-1.5 py-1 active:scale-95 transition-all"
+            >
+              [ 登出 ]
+            </button>
+          </div>
 
           <div className="flex gap-2">
             <button
@@ -552,10 +734,33 @@ export default function AnimeTracker() {
             </button>
 
             <button
+              onClick={() => checkAIProgress()}
+              disabled={isCheckingAI || refreshing}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all relative ${isCheckingAI ? 'bg-purple-500/20 border-purple-500/40 text-purple-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-purple-400'}`}
+              aria-label="AI 檢查"
+              title="執行 AI 追蹤檢查"
+            >
+              {isCheckingAI && (
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-purple-500 rounded-full animate-ping"></span>
+              )}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`w-4.5 h-4.5 ${isCheckingAI ? 'animate-pulse' : ''}`}>
+                <path d="M12 2v8"></path>
+                <path d="M12 14v8"></path>
+                <path d="M4.93 4.93l2.83 2.83"></path>
+                <path d="M16.24 16.24l2.83 2.83"></path>
+                <path d="M2 12h8"></path>
+                <path d="M14 12h8"></path>
+                <path d="M4.93 19.07l2.83-2.83"></path>
+                <path d="M16.24 7.76l2.83-2.83"></path>
+              </svg>
+            </button>
+
+            <button
               onClick={handleManualRefresh}
-              disabled={refreshing}
-              className={`w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 active:scale-90 transition-all ${refreshing ? 'animate-spin' : ''}`}
+              disabled={refreshing || isCheckingAI}
+              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all ${refreshing ? 'animate-spin bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-blue-400'}`}
               aria-label="重新整理"
+              title="同步雲端數據"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
                 <path d="M23 4v6h-6"></path>
@@ -566,6 +771,26 @@ export default function AnimeTracker() {
           </div>
         </div>
       </header>
+
+      {aiUpdatesFound && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 duration-500">
+          <div className="bg-red-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 border border-red-400/30 backdrop-blur-md">
+            <div className="w-2 h-2 rounded-full bg-white animate-pulse"></div>
+            <p className="text-sm font-black tracking-tight">發現新集數更新！</p>
+          </div>
+        </div>
+      )}
+
+      {failedAnimeNames.length > 0 && (
+        <div className="fixed top-40 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-4 duration-500 w-[90%] max-w-xs">
+          <div className="bg-zinc-900/90 text-zinc-400 px-5 py-3 rounded-2xl shadow-2xl border border-zinc-800 backdrop-blur-md text-center">
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-zinc-500">搜尋不順利</p>
+            <p className="text-xs font-medium leading-relaxed">
+              無法在網上查到 <span className="text-white font-bold">{failedAnimeNames.join(", ")}</span> 的最新進度資料。
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Add Item Modal */}
       {showAddItem && (
@@ -681,12 +906,24 @@ export default function AnimeTracker() {
                 <p>點擊右上角的 <span className="text-white">登出</span> 即可更換登入不同的帳號。</p>
               </div>
               <div className="flex gap-3 items-center">
-                <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 text-[10px] font-bold">±</div>
-                <p>點擊左右按鈕快速<span className="text-white">增加或減少</span>集數。</p>
+                <div className="w-8 h-8 rounded-lg bg-yellow-600/20 flex items-center justify-center text-yellow-400 shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+                </div>
+                <p>點擊 <span className="text-white">星號</span> 收藏作品，只有收藏的項目會被納入 AI 追蹤檢查。</p>
               </div>
               <div className="flex gap-3 items-center">
-                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 shrink-0 text-[10px] font-bold">12</div>
-                <p>直接點擊數字區域，<span className="text-white">輸入精確數值</span>後按 Enter 或點空白處保存。</p>
+                <div className="w-8 h-8 rounded-lg bg-purple-600/20 flex items-center justify-center text-purple-400 shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M12 2v8M12 14v8M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h8M14 12h8M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path></svg>
+                </div>
+                <p>點擊右上角 <span className="text-white">紫色 AI 按鈕</span>，自動檢查全網最新集數並顯示紅色呼吸燈。</p>
+              </div>
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 text-[10px] font-bold">...</div>
+                <p>名稱太長會縮略，<span className="text-white">直接點擊標題</span> 即可展開查看完整內容。</p>
+              </div>
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 shrink-0 text-[14px] font-bold">✎</div>
+                <p>點擊標題旁的 <span className="text-white">筆圖示</span> 可修改動畫名稱。</p>
               </div>
 
               <div className="pt-4 border-t border-zinc-800">
@@ -730,9 +967,25 @@ export default function AnimeTracker() {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 group/name">
-                    <div className="text-[15px] font-bold leading-tight text-zinc-100 break-words flex-1">
-                      {item.name}
+                    <div
+                      onClick={() => toggleExpand(item.rowNumber)}
+                      className={`text-[17px] font-black leading-tight text-white flex-1 flex items-center gap-2 cursor-pointer select-none active:opacity-70 transition-opacity ${expandedItems[item.rowNumber] ? '' : 'min-w-0'}`}
+                      title={item.name}
+                    >
+                      <span className={expandedItems[item.rowNumber] ? 'break-words' : 'truncate'}>{item.name}</span>
+                      {hasNewEpisode(item.latest, item.progress) && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-pulse shrink-0 border-2 border-zinc-900"></span>
+                      )}
                     </div>
+                    <button
+                      onClick={() => handleToggleFavorite(item)}
+                      className={`p-1 transition-all shrink-0 active:scale-90 ${item.favorite ? 'text-yellow-400' : 'text-zinc-700 hover:text-zinc-500'}`}
+                      title={item.favorite ? "取消追蹤" : "加入追蹤並開啟 AI 檢查"}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill={item.favorite ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                      </svg>
+                    </button>
                     <button
                       onClick={() => {
                         setItemToRename(item);
@@ -747,9 +1000,27 @@ export default function AnimeTracker() {
                       </svg>
                     </button>
                   </div>
-                  <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500/40"></span>
-                    {item.date ? (item.date.includes('T') ? new Date(item.date).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : item.date) : '未知'}
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-800/30 px-2 py-1 rounded-lg">
+                      <span className="w-1 h-1 rounded-full bg-blue-500/40"></span>
+                      {item.date ? (item.date.includes('T') ? new Date(item.date).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : item.date) : '未知'}
+                    </div>
+                    {item.latest ? (
+                      hasNewEpisode(item.latest, item.progress) ? (
+                        <div className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                          <span className="text-[9px] text-red-400 font-black uppercase tracking-tight">
+                            發現更新: {item.latest}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="px-2 py-1 rounded-lg bg-zinc-800/40 border border-zinc-700/30 flex items-center gap-1.5">
+                          <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-tight">
+                            最新: {item.latest}
+                          </span>
+                        </div>
+                      )
+                    ) : null}
                   </div>
                 </div>
 
