@@ -32,7 +32,7 @@ export default function AnimeTracker() {
   const [loginName, setLoginName] = useState('');
   const [loginError, setLoginError] = useState('');
 
-  const fetchAccountList = async () => {
+  const fetchAccountList = async (isSilent = false) => {
     if (!APPS_SCRIPT_URL) {
       console.error('Apps Script URL is missing');
       setInitializing(false);
@@ -48,12 +48,16 @@ export default function AnimeTracker() {
         if (matched) {
           setCurrentAccount(matched);
           setIsLoggedIn(true);
+          // If we recovered from storage, we might have set initializing to false already.
+          // But if not, we do it here.
         }
       }
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
     } finally {
-      setInitializing(false);
+      if (!isSilent) {
+        setInitializing(false);
+      }
     }
   };
 
@@ -96,7 +100,17 @@ export default function AnimeTracker() {
 
   useEffect(() => {
     setHasMounted(true);
-    fetchAccountList();
+
+    // 優先從本地讀取帳號，加速啟動
+    const saved = localStorage.getItem('lastAccount');
+    if (saved) {
+      setCurrentAccount(saved);
+      setIsLoggedIn(true);
+      setInitializing(false); // 已有帳號，直接進入主介面
+      fetchAccountList(true); // 背景同步帳號列表
+    } else {
+      fetchAccountList(); // 正常初始化
+    }
   }, []);
 
   useEffect(() => {
@@ -483,7 +497,7 @@ export default function AnimeTracker() {
       {/* Background decoration */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[150%] h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
 
-      <header className="mb-8 px-1 flex items-end justify-between">
+      <header className="mb-8 px-1 flex items-start justify-between">
         <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-black tracking-tighter mb-1.5 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
             TRACKER
@@ -492,10 +506,10 @@ export default function AnimeTracker() {
             <div className="flex items-center gap-2">
               <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest leading-none">使用者帳戶</span>
               <button
-                onClick={handleLogout}
+                onClick={() => setShowDeleteAccount(true)}
                 className="text-[8px] font-black text-red-500/50 hover:text-red-400 uppercase tracking-widest px-1.5 py-0.5 active:scale-95 transition-all"
               >
-                [ 登出 ]
+                [ 註銷帳號 ]
               </button>
             </div>
 
@@ -505,54 +519,51 @@ export default function AnimeTracker() {
           </div>
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex flex-col items-end gap-2.5">
           <button
-            onClick={() => setShowDeleteAccount(true)}
-            className="w-9 h-9 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-500/60 hover:text-red-500 active:scale-90 transition-all"
-            aria-label="刪除此帳號"
+            onClick={handleLogout}
+            className="text-[8px] font-black text-blue-500/50 hover:text-blue-400 uppercase tracking-widest px-1.5 py-1 active:scale-95 transition-all"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-              <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-              <line x1="10" y1="11" x2="10" y2="17"></line>
-              <line x1="14" y1="11" x2="14" y2="17"></line>
-            </svg>
+            [ 登出 ]
           </button>
 
-          <button
-            onClick={() => setShowAddItem(true)}
-            className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
-            aria-label="新增項目"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-              <line x1="12" y1="5" x2="12" y2="19"></line>
-              <line x1="5" y1="12" x2="19" y2="12"></line>
-            </svg>
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAddItem(true)}
+              className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
+              aria-label="新增項目"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+            </button>
 
-          <button
-            onClick={() => setShowHelp(true)}
-            className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
-            aria-label="使用說明"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-              <line x1="12" y1="17" x2="12.01" y2="17"></line>
-            </svg>
-          </button>
+            <button
+              onClick={() => setShowHelp(true)}
+              className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
+              aria-label="使用說明"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                <line x1="12" y1="17" x2="12.01" y2="17"></line>
+              </svg>
+            </button>
 
-          <button
-            onClick={handleManualRefresh}
-            disabled={refreshing}
-            className={`w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 active:scale-90 transition-all ${refreshing ? 'animate-spin' : ''}`}
-            aria-label="重新整理"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-              <path d="M23 4v6h-6"></path>
-              <path d="M1 20v-6h6"></path>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-            </svg>
-          </button>
+            <button
+              onClick={handleManualRefresh}
+              disabled={refreshing}
+              className={`w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center text-blue-400 active:scale-90 transition-all ${refreshing ? 'animate-spin' : ''}`}
+              aria-label="重新整理"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+                <path d="M23 4v6h-6"></path>
+                <path d="M1 20v-6h6"></path>
+                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+              </svg>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -658,29 +669,46 @@ export default function AnimeTracker() {
       {/* Help Modal */}
       {showHelp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-zinc-900 border border-zinc-800 p-7 rounded-[32px] shadow-2xl w-full max-w-xs animate-in zoom-in-95 duration-200">
+          <div className="bg-zinc-900 border border-zinc-800 p-7 rounded-[32px] shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200">
             <h2 className="text-xl font-black mb-5 text-white tracking-tight">操作小技巧</h2>
-            <div className="space-y-5 text-zinc-400 text-xs font-medium">
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-lg bg-green-600/20 flex items-center justify-center text-green-400 shrink-0 text-[10px] font-bold">+</div>
+            <div className="space-y-4 text-zinc-400 text-xs font-medium max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-green-600/20 flex items-center justify-center text-green-400 shrink-0 text-[10px] font-bold">+</div>
                 <p>點擊右上角的 <span className="text-white">+ 號</span> 即可在當前帳號下新增新的追蹤項目。</p>
               </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-lg bg-red-600/20 flex items-center justify-center text-red-400 shrink-0 text-[10px] font-bold">OUT</div>
-                <p>點擊頂部的 <span className="text-white">Logout</span> 即可更換登入不同的帳號。</p>
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-red-600/20 flex items-center justify-center text-red-500 shrink-0 text-[10px] font-bold">OUT</div>
+                <p>點擊右上角的 <span className="text-white">登出</span> 即可更換登入不同的帳號。</p>
               </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 text-[10px] font-bold">+ -</div>
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-blue-600/20 flex items-center justify-center text-blue-400 shrink-0 text-[10px] font-bold">±</div>
                 <p>點擊左右按鈕快速<span className="text-white">增加或減少</span>集數。</p>
               </div>
-              <div className="flex gap-3 items-start">
-                <div className="w-7 h-7 rounded-lg bg-green-600/20 flex items-center justify-center text-green-400 shrink-0 text-[10px] font-bold">12</div>
+              <div className="flex gap-3 items-center">
+                <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center text-zinc-400 shrink-0 text-[10px] font-bold">12</div>
                 <p>直接點擊數字區域，<span className="text-white">輸入精確數值</span>後按 Enter 或點空白處保存。</p>
+              </div>
+
+              <div className="pt-4 border-t border-zinc-800">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
+                  <h3 className="text-white font-black uppercase tracking-widest text-[10px]">安裝為 App (PWA)</h3>
+                </div>
+                <div className="space-y-3 pl-3.5">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">iOS (Safari)</span>
+                    <p>點擊瀏覽器底部的 <span className="text-zinc-300">「分享」</span> 按鈕，然後選擇 <span className="text-blue-400 font-bold">「加入主畫面」</span>。</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-wider">Android (Chrome)</span>
+                    <p>點擊右上角 <span className="text-zinc-300">「...」</span> 選單，然後選擇 <span className="text-blue-400 font-bold">「安裝應用程式」</span>。</p>
+                  </div>
+                </div>
               </div>
             </div>
             <button
               onClick={() => setShowHelp(false)}
-              className="mt-8 w-full py-3.5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition-all rounded-xl text-white font-bold text-xs shadow-xl"
+              className="mt-8 w-full py-4 bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition-all rounded-2xl text-white font-bold text-xs shadow-xl"
             >
               我知道了
             </button>
