@@ -87,67 +87,53 @@ ${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
       // 第一步：清空所有 Markdown 代碼塊標記
       let sanitizedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-      // 第二步：「括號平衡解析」技術 - 尋找第一個完整的 JSON 物件區塊
-      // 這樣即便 AI 在後面重複輸出或產生雜訊，我們也只取第一個合法的 JSON 塊
-      let balancedJson = "";
-      const startIdx = sanitizedText.indexOf('{');
-      if (startIdx !== -1) {
+      // 第二步：「深度掃描解析」技術 - 尋找文本中第一個合法的 JSON 物件
+      // 遍歷所有 '{' 作為起點，嘗試找到最先能成功解析且包含 updates 的資料塊
+      const allStarts = [];
+      for (let i = 0; i < sanitizedText.length; i++) {
+        if (sanitizedText[i] === '{') allStarts.push(i);
+      }
+
+      for (const start of allStarts) {
         let depth = 0;
-        for (let i = startIdx; i < sanitizedText.length; i++) {
-          if (sanitizedText[i] === '{') depth++;
-          else if (sanitizedText[i] === '}') depth--;
+        for (let j = start; j < sanitizedText.length; j++) {
+          if (sanitizedText[j] === '{') depth++;
+          else if (sanitizedText[j] === '}') depth--;
 
           if (depth === 0) {
-            balancedJson = sanitizedText.substring(startIdx, i + 1);
-            break;
+            const candidate = sanitizedText.substring(start, j + 1);
+            try {
+              const parsed = JSON.parse(candidate) as AIResponse;
+              if (parsed && Array.isArray(parsed.updates)) {
+                // 成功抓到有效數據，直接返回
+                return parsed;
+              }
+            } catch (e) {
+              // 解析失敗，繼續尋找下一個可能的括號對
+            }
+            break; // 結束目前的 depth 掃描，嘗試下一個 start 位址
           }
         }
       }
 
-      // 如果沒找到平衡括號，則回退到原本的邏輯
-      const finalJson = balancedJson || sanitizedText;
-
+      // 如果掃描完都沒有成功，嘗試直接解析整個 sanitizedText
       try {
-        const parsed = JSON.parse(finalJson) as AIResponse;
+        const parsed = JSON.parse(sanitizedText) as AIResponse;
+        if (parsed && Array.isArray(parsed.updates)) return parsed;
+      } catch (e) { }
 
-        if (!parsed.updates || !Array.isArray(parsed.updates)) {
-          throw new Error("AI 回傳格式不正確");
-        }
-
-        return parsed;
-      } catch (parseError) {
-        console.error("JSON Parse Error. Raw:", text, "Extracted:", finalJson);
-        throw new Error("AI 回傳了損壞的格式，正在嘗試切換模型重試...");
-      }
+      // 本模型失敗，靜默進入下一個模型
+      console.warn(`[AI] 模型 ${modelName} 未能產出有效 JSON，嘗試備援模型...`);
+      continue;
 
     } catch (error: any) {
-      console.warn(`Model ${modelName} failed, trying next... Error:`, error.message);
-
-      let friendlyMessage = error.message;
-      const errMsg = error.message?.toLowerCase() || "";
-
-      // 錯誤訊息中文化轉譯層
-      if (errMsg.includes("429") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("too many requests")) {
-        friendlyMessage = `模型 ${modelName} 回報次數已上限`;
-      } else if (errMsg.includes("503") || errMsg.includes("unavailable")) {
-        friendlyMessage = `模型 ${modelName} 暫時繁忙`;
-      } else if (errMsg.includes("403") || errMsg.includes("api key") || errMsg.includes("invalid")) {
-        friendlyMessage = "API 金鑰無效或受限";
-      } else if (errMsg.includes("json") || errMsg.includes("format") || errMsg.includes("parse")) {
-        friendlyMessage = "AI 回傳格式異常";
-      }
-
-      lastError = new Error(friendlyMessage);
-
-      // 如果是配額或繁忙問題，則繼續嘗試下一個模型
-      if (errMsg.includes("429") || errMsg.includes("503") || errMsg.includes("quota") || errMsg.includes("limit") || errMsg.includes("too many") || friendlyMessage.includes("格式異常")) {
-        continue;
-      }
-
-      // 其他嚴重錯誤則直接拋出
-      throw lastError;
+      // 靜默捕捉所有錯誤（包括 403, 429, 503 等），直到所有模型都嘗試過
+      console.warn(`[AI] 模型 ${modelName} 發生錯誤:`, error.message);
+      lastError = error;
+      continue;
     }
   }
 
-  throw lastError || new Error("所有 AI 模型均無法提供服務，請稍後再試。");
+  // 只有當所有模型都嘗試過且都失敗時，才向使用者報錯
+  throw lastError || new Error("AI 服務連線較擁擠，請稍後再試。");
 }
