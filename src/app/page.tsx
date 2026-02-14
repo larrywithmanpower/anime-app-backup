@@ -672,11 +672,11 @@ export default function AnimeTracker() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-3 pb-24 relative">
+    <main className="min-h-screen bg-black text-white p-3 pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-24 relative">
       {/* Background decoration - confined to prevent horizontal scroll */}
       <div className="absolute top-0 left-0 right-0 h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
 
-      <header className="sticky top-0 z-50 -mx-3 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 mb-6 bg-black/60 backdrop-blur-xl border-b border-white/5 flex items-start justify-between">
+      <header className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 bg-black/85 backdrop-blur-xl border-b border-white/5 flex items-start justify-between shadow-lg shadow-black/50">
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl sm:text-3xl font-black tracking-tighter mb-1 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
             TRACKER
