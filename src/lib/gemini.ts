@@ -87,43 +87,53 @@ ${animations.map((a) => `${a.name} (目前: ${a.current})`).join("\n")}`;
       // 第一步：清空所有 Markdown 代碼塊標記
       let sanitizedText = text.replace(/```json/g, "").replace(/```/g, "").trim();
 
-      // 第二步：「深度掃描解析」技術 - 尋找文本中第一個合法的 JSON 物件
-      // 遍歷所有 '{' 作為起點，嘗試找到最先能成功解析且包含 updates 的資料塊
+      // 第二步：「深度掃描解析」與「自動修復」技術
       const allStarts = [];
       for (let i = 0; i < sanitizedText.length; i++) {
         if (sanitizedText[i] === '{') allStarts.push(i);
       }
 
+      // 定義一個修復函式，嘗試補齊截斷的 JSON
+      const tryParseWithRepair = (jsonStr: string): AIResponse | null => {
+        const repairs = ["", "}", "]}", "]} }", "]} ] }"];
+        for (const suffix of repairs) {
+          try {
+            const parsed = JSON.parse(jsonStr + suffix) as AIResponse;
+            if (parsed && Array.isArray(parsed.updates)) return parsed;
+          } catch (e) { }
+        }
+        return null;
+      };
+
       for (const start of allStarts) {
         let depth = 0;
+        let foundMatch = false;
         for (let j = start; j < sanitizedText.length; j++) {
           if (sanitizedText[j] === '{') depth++;
           else if (sanitizedText[j] === '}') depth--;
 
           if (depth === 0) {
             const candidate = sanitizedText.substring(start, j + 1);
-            try {
-              const parsed = JSON.parse(candidate) as AIResponse;
-              if (parsed && Array.isArray(parsed.updates)) {
-                // 成功抓到有效數據，直接返回
-                return parsed;
-              }
-            } catch (e) {
-              // 解析失敗，繼續尋找下一個可能的括號對
-            }
-            break; // 結束目前的 depth 掃描，嘗試下一個 start 位址
+            const parsed = tryParseWithRepair(candidate);
+            if (parsed) return parsed;
+            foundMatch = true;
+            break;
           }
+        }
+
+        // 如果這個開始位址 $\{起點\}$ 沒找到配對的 $\}$, 且已經到文本末尾，嘗試「截斷修復」
+        if (!foundMatch && depth > 0) {
+          const candidate = sanitizedText.substring(start);
+          const parsed = tryParseWithRepair(candidate);
+          if (parsed) return parsed;
         }
       }
 
-      // 如果掃描完都沒有成功，嘗試直接解析整個 sanitizedText
-      try {
-        const parsed = JSON.parse(sanitizedText) as AIResponse;
-        if (parsed && Array.isArray(parsed.updates)) return parsed;
-      } catch (e) { }
+      // 第三步：嘗試直接修復解析整個文本
+      const finalParsed = tryParseWithRepair(sanitizedText);
+      if (finalParsed) return finalParsed;
 
-      // 本模型失敗，靜默進入下一個模型
-      console.warn(`[AI] 模型 ${modelName} 未能產出有效 JSON，嘗試備援模型...`);
+      console.warn(`[AI] 模型 ${modelName} 內容解析失敗，進入備援循環...`);
       continue;
 
     } catch (error: any) {
