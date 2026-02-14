@@ -10,6 +10,16 @@ const MODELS = [
 ];
 
 const API_KEY = process.env.NEXT_PUBLIC_GEMINI_API_KEY || "";
+
+// 安全診斷：僅在瀏覽器端檢查金鑰是否存在，不外洩內容
+if (typeof window !== "undefined") {
+  if (!API_KEY) {
+    console.warn("⚠️ [AI Debug] 偵測到 API 金鑰為空。請檢查 GitHub Secrets 是否正確設定並推送到 Actions。");
+  } else {
+    console.log(`✅ [AI Debug] API 金鑰已載入，長度為: ${API_KEY.length} 字元。`);
+  }
+}
+
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 export interface AnimeCheckRequest {
