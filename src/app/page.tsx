@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { checkAnimeUpdates } from '@/lib/gemini';
 
 interface AnimeItem {
   rowNumber: number;
@@ -116,17 +117,10 @@ export default function AnimeTracker() {
     if (trackingList.length === 0 || isCheckingAI) return;
     setIsCheckingAI(true);
     try {
-      const response = await fetch('/api/check-anime', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ animations: trackingList.map(item => ({ name: item.name, current: item.progress })) }),
-      });
-      const data = await response.json();
-
-      if (data.error) {
-        console.error("AI Check Error from API:", data.error);
-        return;
-      }
+      const data = await checkAnimeUpdates(trackingList.map(item => ({
+        name: item.name,
+        current: item.progress
+      })));
 
       if (data.updates) {
         // Update local state temporarily
