@@ -988,7 +988,7 @@ export default function AnimeTracker() {
             <div className="text-zinc-600 font-bold uppercase tracking-widest text-xs">同步數據中...</div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {list.map((item) => (
               <div
                 key={item.rowNumber}
@@ -1002,7 +1002,7 @@ export default function AnimeTracker() {
                         className={`text-[17px] font-black leading-tight text-white flex-1 flex items-center gap-2 cursor-pointer select-none active:opacity-70 transition-opacity ${expandedItems[item.rowNumber] ? '' : 'min-w-0'}`}
                         title={item.name}
                       >
-                        <span className={expandedItems[item.rowNumber] ? 'break-words' : 'truncate'}>{item.name}</span>
+                        <span className={expandedItems[item.rowNumber] ? 'break-words' : 'line-clamp-2 md:line-clamp-none break-words'}>{item.name}</span>
                         {/* AI Red Dot Hidden
                       {hasNewEpisode(item.latest, item.progress) && (
                         <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-pulse shrink-0 border-2 border-zinc-900"></span>
