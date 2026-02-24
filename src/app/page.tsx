@@ -687,67 +687,68 @@ export default function AnimeTracker() {
   }
 
   return (
-    <main className="min-h-screen bg-black text-white p-3 pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-24 relative">
+    <main className="min-h-screen bg-black text-white pt-[calc(env(safe-area-inset-top)+6.5rem)] pb-24 relative overflow-x-hidden">
       {/* Background decoration - confined to prevent horizontal scroll */}
       <div className="absolute top-0 left-0 right-0 h-64 bg-blue-600/10 blur-[100px] -z-10 rounded-full" />
 
-      <header className="fixed top-0 left-0 right-0 z-50 px-3 sm:px-4 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 bg-black/85 backdrop-blur-xl border-b border-white/5 flex items-start justify-between shadow-lg shadow-black/50">
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tighter mb-1 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
-            TRACKER
-          </h1>
-          <div className="flex flex-col gap-1.5">
+      <header className="fixed top-0 left-0 right-0 z-50 pt-[calc(env(safe-area-inset-top)+1rem)] pb-4 bg-black/85 backdrop-blur-xl border-b border-white/5 shadow-lg shadow-black/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-start justify-between">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tighter mb-1 bg-gradient-to-b from-white to-zinc-500 bg-clip-text text-transparent italic leading-none">
+              TRACKER
+            </h1>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center gap-2">
+                <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest leading-none">使用者帳戶</span>
+                <button
+                  onClick={() => setShowDeleteAccount(true)}
+                  className="text-[8px] font-black text-red-500/50 hover:text-red-400 uppercase tracking-widest px-1.5 py-0.5 active:scale-95 transition-all"
+                >
+                  [ 註銷帳號 ]
+                </button>
+              </div>
+
+              <div className="text-lg font-black tracking-tight text-white px-0.5 leading-none">
+                {currentAccount}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-2.5">
             <div className="flex items-center gap-2">
-              <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest leading-none">使用者帳戶</span>
               <button
-                onClick={() => setShowDeleteAccount(true)}
-                className="text-[8px] font-black text-red-500/50 hover:text-red-400 uppercase tracking-widest px-1.5 py-0.5 active:scale-95 transition-all"
+                onClick={handleLogout}
+                className="text-[8px] font-black text-blue-500/50 hover:text-blue-400 uppercase tracking-widest px-1.5 py-1 active:scale-95 transition-all"
               >
-                [ 註銷帳號 ]
+                [ 登出 ]
               </button>
             </div>
 
-            <div className="text-lg font-black tracking-tight text-white px-0.5 leading-none">
-              {currentAccount}
-            </div>
-          </div>
-        </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowAddItem(true)}
+                className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
+                aria-label="新增項目"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
 
-        <div className="flex flex-col items-end gap-2.5">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleLogout}
-              className="text-[8px] font-black text-blue-500/50 hover:text-blue-400 uppercase tracking-widest px-1.5 py-1 active:scale-95 transition-all"
-            >
-              [ 登出 ]
-            </button>
-          </div>
+              <button
+                onClick={() => setShowHelp(true)}
+                className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
+                aria-label="使用說明"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </button>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowAddItem(true)}
-              className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
-              aria-label="新增項目"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-            </button>
-
-            <button
-              onClick={() => setShowHelp(true)}
-              className="w-9 h-9 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 active:scale-90 transition-all"
-              aria-label="使用說明"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-                <circle cx="12" cy="12" r="10"></circle>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                <line x1="12" y1="17" x2="12.01" y2="17"></line>
-              </svg>
-            </button>
-
-            {/* AI Check Button Hidden
+              {/* AI Check Button Hidden
             <button
               onClick={() => checkAIProgress()}
               disabled={isCheckingAI || refreshing}
@@ -771,19 +772,20 @@ export default function AnimeTracker() {
             </button>
             */}
 
-            <button
-              onClick={handleManualRefresh}
-              disabled={refreshing || isCheckingAI}
-              className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all ${refreshing ? 'animate-spin bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-blue-400'}`}
-              aria-label="重新整理"
-              title="同步雲端數據"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
-                <path d="M23 4v6h-6"></path>
-                <path d="M1 20v-6h6"></path>
-                <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-              </svg>
-            </button>
+              <button
+                onClick={handleManualRefresh}
+                disabled={refreshing || isCheckingAI}
+                className={`w-9 h-9 rounded-xl border flex items-center justify-center transition-all ${refreshing ? 'animate-spin bg-blue-500/20 border-blue-500/40 text-blue-400' : 'bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-blue-400'}`}
+                aria-label="重新整理"
+                title="同步雲端數據"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4.5 h-4.5">
+                  <path d="M23 4v6h-6"></path>
+                  <path d="M1 20v-6h6"></path>
+                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                </svg>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -980,33 +982,34 @@ export default function AnimeTracker() {
         </div>
       )}
 
-      {refreshing && list.length === 0 ? (
-        <div className="flex items-center justify-center py-20 animate-pulse">
-          <div className="text-zinc-600 font-bold uppercase tracking-widest text-xs">同步數據中...</div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {list.map((item) => (
-            <div
-              key={item.rowNumber}
-              className="group relative overflow-hidden p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/40 backdrop-blur-sm transition-all hover:bg-zinc-900 hover:border-zinc-700/50 shadow-xl"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 group/name">
-                    <div
-                      onClick={() => toggleExpand(item.rowNumber)}
-                      className={`text-[17px] font-black leading-tight text-white flex-1 flex items-center gap-2 cursor-pointer select-none active:opacity-70 transition-opacity ${expandedItems[item.rowNumber] ? '' : 'min-w-0'}`}
-                      title={item.name}
-                    >
-                      <span className={expandedItems[item.rowNumber] ? 'break-words' : 'truncate'}>{item.name}</span>
-                      {/* AI Red Dot Hidden
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        {refreshing && list.length === 0 ? (
+          <div className="flex items-center justify-center py-20 animate-pulse">
+            <div className="text-zinc-600 font-bold uppercase tracking-widest text-xs">同步數據中...</div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {list.map((item) => (
+              <div
+                key={item.rowNumber}
+                className="group relative overflow-hidden p-4 bg-zinc-900/50 rounded-2xl border border-zinc-800/40 backdrop-blur-sm transition-all hover:bg-zinc-900 hover:border-zinc-700/50 shadow-xl"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 group/name">
+                      <div
+                        onClick={() => toggleExpand(item.rowNumber)}
+                        className={`text-[17px] font-black leading-tight text-white flex-1 flex items-center gap-2 cursor-pointer select-none active:opacity-70 transition-opacity ${expandedItems[item.rowNumber] ? '' : 'min-w-0'}`}
+                        title={item.name}
+                      >
+                        <span className={expandedItems[item.rowNumber] ? 'break-words' : 'truncate'}>{item.name}</span>
+                        {/* AI Red Dot Hidden
                       {hasNewEpisode(item.latest, item.progress) && (
                         <span className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-pulse shrink-0 border-2 border-zinc-900"></span>
                       )}
                       */}
-                    </div>
-                    {/* Star Button Hidden
+                      </div>
+                      {/* Star Button Hidden
                     <button
                       onClick={() => handleToggleFavorite(item)}
                       className={`p-1 transition-all shrink-0 active:scale-90 ${item.favorite ? 'text-yellow-400' : 'text-zinc-700 hover:text-zinc-500'}`}
@@ -1017,26 +1020,26 @@ export default function AnimeTracker() {
                       </svg>
                     </button>
                     */}
-                    <button
-                      onClick={() => {
-                        setItemToRename(item);
-                        setRenameValue(item.name);
-                      }}
-                      className="p-1 px-1.5 text-zinc-500 hover:text-blue-400 transition-all shrink-0 active:scale-90"
-                      title="修改名稱"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-                        <path d="M12 20h9"></path>
-                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-800/30 px-2 py-1 rounded-lg">
-                      <span className="w-1 h-1 rounded-full bg-blue-500/40"></span>
-                      {item.date ? (item.date.includes('T') ? new Date(item.date).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : item.date) : '未知'}
+                      <button
+                        onClick={() => {
+                          setItemToRename(item);
+                          setRenameValue(item.name);
+                        }}
+                        className="p-1 px-1.5 text-zinc-500 hover:text-blue-400 transition-all shrink-0 active:scale-90"
+                        title="修改名稱"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
+                          <path d="M12 20h9"></path>
+                          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
+                        </svg>
+                      </button>
                     </div>
-                    {/* Latest Info Hidden
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <div className="flex items-center gap-1.5 text-[9px] text-zinc-500 font-bold uppercase tracking-wider bg-zinc-800/30 px-2 py-1 rounded-lg">
+                        <span className="w-1 h-1 rounded-full bg-blue-500/40"></span>
+                        {item.date ? (item.date.includes('T') ? new Date(item.date).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '/') : item.date) : '未知'}
+                      </div>
+                      {/* Latest Info Hidden
                     {item.latest ? (
                       hasNewEpisode(item.latest, item.progress) ? (
                         <div className="px-2 py-1 rounded-lg bg-red-500/10 border border-red-500/20 flex items-center gap-1.5 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
@@ -1054,130 +1057,131 @@ export default function AnimeTracker() {
                       )
                     ) : null}
                     */}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center bg-black/50 rounded-xl p-0.5 border border-zinc-800 group-hover:border-blue-500/20 transition-all">
-                    {/^\d+$/.test(item.progress) && (
-                      <button
-                        onClick={() => handleDecrement(item)}
-                        className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white active:scale-75 transition-all"
-                        aria-label="減少"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                      </button>
-                    )}
-                    <div className="flex flex-col items-center px-1">
-                      <span className="text-[6px] font-black text-blue-500/50 uppercase tracking-[0.2em] mb-0">
-                        {/^\d+$/.test(item.progress) ? '集數' : '狀態'}
-                      </span>
-                      <input
-                        type="text"
-                        value={item.progress}
-                        onChange={(e) => handleInputChange(item, e.target.value)}
-                        onBlur={() => handleInputBlur(item)}
-                        onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-                        className={`${/^\d+$/.test(item.progress) ? 'w-8' : 'min-w-[40px] max-w-[105px] px-0.5'} bg-transparent text-blue-500 text-center font-black text-base focus:outline-none transition-all`}
-                      />
                     </div>
-                    {/^\d+$/.test(item.progress) && (
-                      <button
-                        onClick={() => handleIncrement(item)}
-                        className="w-8 h-8 flex items-center justify-center text-blue-500 hover:text-blue-400 active:scale-75 transition-all"
-                        aria-label="增加"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                      </button>
-                    )}
                   </div>
 
-                  <button
-                    onClick={() => setItemToDelete(item)}
-                    className="p-2 text-red-500/40 hover:text-red-500 active:scale-90 transition-all"
-                    title="刪除項次"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
-                      <polyline points="3 6 5 6 21 6"></polyline>
-                      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center bg-black/50 rounded-xl p-0.5 border border-zinc-800 group-hover:border-blue-500/20 transition-all">
+                      {/^\d+$/.test(item.progress) && (
+                        <button
+                          onClick={() => handleDecrement(item)}
+                          className="w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white active:scale-75 transition-all"
+                          aria-label="減少"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                      )}
+                      <div className="flex flex-col items-center px-1">
+                        <span className="text-[6px] font-black text-blue-500/50 uppercase tracking-[0.2em] mb-0">
+                          {/^\d+$/.test(item.progress) ? '集數' : '狀態'}
+                        </span>
+                        <input
+                          type="text"
+                          value={item.progress}
+                          onChange={(e) => handleInputChange(item, e.target.value)}
+                          onBlur={() => handleInputBlur(item)}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+                          className={`${/^\d+$/.test(item.progress) ? 'w-8' : 'min-w-[40px] max-w-[105px] px-0.5'} bg-transparent text-blue-500 text-center font-black text-base focus:outline-none transition-all`}
+                        />
+                      </div>
+                      {/^\d+$/.test(item.progress) && (
+                        <button
+                          onClick={() => handleIncrement(item)}
+                          className="w-8 h-8 flex items-center justify-center text-blue-500 hover:text-blue-400 active:scale-75 transition-all"
+                          aria-label="增加"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                        </button>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={() => setItemToDelete(item)}
+                      className="p-2 text-red-500/40 hover:text-red-500 active:scale-90 transition-all"
+                      title="刪除項次"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4">
+                        <polyline points="3 6 5 6 21 6"></polyline>
+                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Centered Loading Overlay for initial data fetch or manual refresh */}
-      {refreshing && list.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-32 px-6 animate-in fade-in duration-500">
-          <div className="w-12 h-12 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin mb-6" />
-          <div className="text-center space-y-2">
-            <span className="block text-zinc-400 font-black text-lg tracking-tight">同步數據中...</span>
-            <span className="block text-zinc-600 font-bold text-[10px] uppercase tracking-[0.2em]">請稍候，正在連線至 Google Sheets</span>
+            ))}
           </div>
-        </div>
-      )}
+        )}
 
-      {list.length === 0 && !refreshing && (
-        <div className="flex flex-col items-center justify-center py-32 px-6 animate-in zoom-in-95 duration-700">
-          <button
-            onClick={() => setShowAddItem(true)}
-            className="group relative flex flex-col items-center gap-6 active:scale-95 transition-all duration-300"
-          >
-            <div className="w-24 h-24 rounded-[32px] bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 group-hover:text-blue-500 group-hover:border-blue-500/30 group-hover:bg-blue-500/5 transition-all duration-500 shadow-2xl group-hover:shadow-blue-500/10">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-
-              {/* Animated rings */}
-              <div className="absolute inset-0 rounded-[32px] border border-blue-500/0 group-hover:border-blue-500/50 group-hover:scale-110 transition-all duration-700 opacity-0 group-hover:opacity-100" />
-            </div>
-
+        {/* Centered Loading Overlay for initial data fetch or manual refresh */}
+        {refreshing && list.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-32 px-6 animate-in fade-in duration-500">
+            <div className="w-12 h-12 border-2 border-zinc-800 border-t-blue-500 rounded-full animate-spin mb-6" />
             <div className="text-center space-y-2">
-              <span className="block text-zinc-400 font-black text-lg tracking-tight">新增您的第一部動畫</span>
-              <span className="block text-zinc-600 font-bold text-[10px] uppercase tracking-[0.2em]">點擊上方按鈕開始追蹤</span>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {/* Delete Account Confirmation Modal */}
-      {showDeleteAccount && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-300">
-          <div className="bg-zinc-900 border border-red-500/20 p-8 rounded-[40px] shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200 text-center">
-            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-8 border border-red-500/20">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-red-500 animate-pulse">
-                <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
-                <path d="M10 11v6"></path>
-                <path d="M14 11v6"></path>
-              </svg>
-            </div>
-            <h3 className="text-2xl font-black text-white mb-3">刪除整個帳號？</h3>
-            <p className="text-zinc-500 text-sm mb-10 leading-relaxed">
-              您確定要刪除帳號 「<span className="text-red-400 font-black">{currentAccount}</span>」 嗎？<br />
-              這將會<span className="text-zinc-200 font-bold">永久移除</span> Google Sheets 中該分頁的所有動畫追蹤資料，此動作無法復原。
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={handleDeleteAccount}
-                disabled={refreshing}
-                className="w-full py-5 bg-red-600 hover:bg-red-500 active:scale-95 transition-all rounded-2xl text-white font-black text-sm shadow-2xl shadow-red-900/40"
-              >
-                {refreshing ? '正在永久刪除資料...' : '確認永久刪除帳號'}
-              </button>
-              <button
-                onClick={() => setShowDeleteAccount(false)}
-                className="w-full py-5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition-all rounded-2xl text-zinc-400 font-bold text-sm"
-              >
-                取消
-              </button>
+              <span className="block text-zinc-400 font-black text-lg tracking-tight">同步數據中...</span>
+              <span className="block text-zinc-600 font-bold text-[10px] uppercase tracking-[0.2em]">請稍候，正在連線至 Google Sheets</span>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {list.length === 0 && !refreshing && (
+          <div className="flex flex-col items-center justify-center py-32 px-6 animate-in zoom-in-95 duration-700">
+            <button
+              onClick={() => setShowAddItem(true)}
+              className="group relative flex flex-col items-center gap-6 active:scale-95 transition-all duration-300"
+            >
+              <div className="w-24 h-24 rounded-[32px] bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-600 group-hover:text-blue-500 group-hover:border-blue-500/30 group-hover:bg-blue-500/5 transition-all duration-500 shadow-2xl group-hover:shadow-blue-500/10">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+
+                {/* Animated rings */}
+                <div className="absolute inset-0 rounded-[32px] border border-blue-500/0 group-hover:border-blue-500/50 group-hover:scale-110 transition-all duration-700 opacity-0 group-hover:opacity-100" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <span className="block text-zinc-400 font-black text-lg tracking-tight">新增您的第一部動畫</span>
+                <span className="block text-zinc-600 font-bold text-[10px] uppercase tracking-[0.2em]">點擊上方按鈕開始追蹤</span>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Delete Account Confirmation Modal */}
+        {showDeleteAccount && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/95 backdrop-blur-3xl animate-in fade-in duration-300">
+            <div className="bg-zinc-900 border border-red-500/20 p-8 rounded-[40px] shadow-2xl w-full max-w-sm animate-in zoom-in-95 duration-200 text-center">
+              <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-8 border border-red-500/20">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-10 h-10 text-red-500 animate-pulse">
+                  <path d="M3 6h18m-2 0v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6m3 0V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path>
+                  <path d="M10 11v6"></path>
+                  <path d="M14 11v6"></path>
+                </svg>
+              </div>
+              <h3 className="text-2xl font-black text-white mb-3">刪除整個帳號？</h3>
+              <p className="text-zinc-500 text-sm mb-10 leading-relaxed">
+                您確定要刪除帳號 「<span className="text-red-400 font-black">{currentAccount}</span>」 嗎？<br />
+                這將會<span className="text-zinc-200 font-bold">永久移除</span> Google Sheets 中該分頁的所有動畫追蹤資料，此動作無法復原。
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={handleDeleteAccount}
+                  disabled={refreshing}
+                  className="w-full py-5 bg-red-600 hover:bg-red-500 active:scale-95 transition-all rounded-2xl text-white font-black text-sm shadow-2xl shadow-red-900/40"
+                >
+                  {refreshing ? '正在永久刪除資料...' : '確認永久刪除帳號'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteAccount(false)}
+                  className="w-full py-5 bg-zinc-800 hover:bg-zinc-700 active:scale-95 transition-all rounded-2xl text-zinc-400 font-bold text-sm"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </main>
   );
 }
