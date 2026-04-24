@@ -131,11 +131,12 @@ function updateProgress(ss, sheetName, row, progress) {
 function updateName(ss, sheetName, row, newName) {
   var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
   if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
+
   var rowIndex = parseInt(row);
   if (rowIndex <= 1) throw new Error("無效的操作：禁止修改標題列");
-  
+
   sheet.getRange(rowIndex, 2).setValue(newName);
+  sheet.getRange(rowIndex, 1).setValue(Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd"));
   return {success: true};
 }
 
