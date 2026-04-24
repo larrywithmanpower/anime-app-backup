@@ -1,19 +1,199 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
+  /* 墨色基底 */
+  --ink-black: #0a0b10;
+  --ink-deep: #11131c;
+  --ink-mist: #181b26;
+  --ink-border: rgba(236, 232, 222, 0.09);
+  --ink-border-strong: rgba(236, 232, 222, 0.18);
+
+  /* 星藍（次級動作） */
+  --star-blue: #6a8ec4;
+  --star-blue-soft: #425b85;
+  --star-glow: rgba(106, 142, 196, 0.22);
+
+  /* 月光金（主動作 / 進度 / 品牌） */
+  --moon-gold: #e0b96d;
+  --moon-gold-soft: #c29742;
+  --moon-glow: rgba(224, 185, 109, 0.28);
+
+  /* 點綴 */
+  --jade: #7f9f8a;
+  --cinnabar: #c04a52;
+
+  /* 文本階層 */
+  --mist-white: #eee9dc;
+  --mist-silver: #9a96a1;
+  --mist-shadow: #56525e;
+
+  --background: var(--ink-black);
+  --foreground: var(--mist-white);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+
+  /* 底色階層 */
+  --color-ink-black: var(--ink-black);
+  --color-ink-deep: var(--ink-deep);
+  --color-ink-mist: var(--ink-mist);
+
+  /* 線色 */
+  --color-ink-border: var(--ink-border);
+  --color-ink-border-strong: var(--ink-border-strong);
+
+  /* 主色 */
+  --color-star: var(--star-blue);
+  --color-star-soft: var(--star-blue-soft);
+  --color-moon: var(--moon-gold);
+  --color-moon-soft: var(--moon-gold-soft);
+  --color-jade: var(--jade);
+  --color-cinnabar: var(--cinnabar);
+
+  /* 文本 */
+  --color-mist: var(--mist-white);
+  --color-mist-silver: var(--mist-silver);
+  --color-mist-shadow: var(--mist-shadow);
+}
+
+html, body {
+  background: var(--ink-black);
+  color: var(--mist-white);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-family:
+    "Noto Sans TC",
+    -apple-system,
+    BlinkMacSystemFont,
+    "PingFang TC",
+    "Microsoft JhengHei",
+    "Helvetica Neue",
+    sans-serif;
+  font-feature-settings: "palt";
+  position: relative;
+}
+
+/* 大氣層：角落暖冷雙色 radial（z:-1 不影響 flow） */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 75% 55% at 10% -5%, rgba(106, 142, 196, 0.1), transparent 58%),
+    radial-gradient(ellipse 65% 50% at 92% 105%, rgba(224, 185, 109, 0.07), transparent 55%);
+  pointer-events: none;
+  z-index: -2;
+}
+
+/* 雜訊顆粒（z:-1 不影響 flow） */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.92  0 0 0 0 0.89  0 0 0 0 0.82  0 0 0 0.08 0'/></filter><rect width='180' height='180' filter='url(%23n)'/></svg>");
+  opacity: 0.4;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* 顯示字級（襯線繁體） */
+.font-display {
+  font-family:
+    "Noto Serif TC",
+    "Songti TC",
+    "STSong",
+    "Source Han Serif TC",
+    "Noto Sans TC",
+    serif;
+  font-feature-settings: "palt";
+}
+
+/* 等寬（數字） */
+.font-mono {
+  font-family:
+    "JetBrains Mono",
+    ui-monospace,
+    "SF Mono",
+    Menlo,
+    Monaco,
+    Consolas,
+    monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 星起動畫：從霧中升起 */
+@keyframes star-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+  }
+  60% {
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+.star-rise {
+  animation: star-rise 0.65s cubic-bezier(0.22, 1, 0.32, 1) both;
+}
+
+/* staggered 卡片出場 */
+.grid-stagger > * { animation-delay: 0ms; }
+.grid-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.grid-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.grid-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.grid-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.grid-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.grid-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.grid-stagger > *:nth-child(8) { animation-delay: 280ms; }
+.grid-stagger > *:nth-child(9) { animation-delay: 320ms; }
+.grid-stagger > *:nth-child(10) { animation-delay: 360ms; }
+.grid-stagger > *:nth-child(11) { animation-delay: 400ms; }
+.grid-stagger > *:nth-child(12) { animation-delay: 440ms; }
+.grid-stagger > *:nth-child(n+13) { animation-delay: 480ms; }
+
+/* 柔光呼吸 */
+@keyframes moon-breath {
+  0%, 100% { opacity: 0.45; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.04); }
+}
+
+.moon-breath {
+  animation: moon-breath 3.4s ease-in-out infinite;
+}
+
+/* Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--mist-shadow);
+  border-radius: 2px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--mist-silver); }
+
+::selection {
+  background: var(--moon-glow);
+  color: var(--mist-white);
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px var(--ink-deep) inset !important;
+  -webkit-text-fill-color: var(--mist-white) !important;
+  caret-color: var(--moon-gold);
 }
