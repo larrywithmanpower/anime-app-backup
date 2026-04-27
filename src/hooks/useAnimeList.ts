@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { AnimeItem } from '@/types/anime';
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
@@ -10,6 +10,16 @@ const parseDate = (raw: string): number => {
   if (!raw) return 0;
   const t = new Date(raw.includes('T') ? raw : raw.replace(/\//g, '-')).getTime();
   return Number.isNaN(t) ? 0 : t;
+};
+
+// 依排序模式產生 rowNumber 排列順序
+const computeOrder = (items: AnimeItem[], by: 'date' | 'name'): number[] => {
+  const sorted = [...items].sort(
+    by === 'name'
+      ? (a, b) => a.name.localeCompare(b.name, 'zh-TW')
+      : (a, b) => parseDate(b.date) - parseDate(a.date)
+  );
+  return sorted.map(i => i.rowNumber);
 };
 
 export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
@@ -24,7 +34,16 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState<'date' | 'name'>('date');
+  const [sortBy, setSortByState] = useState<'date' | 'name'>('date');
+  // 顯示順序快照；只在載入清單或切換排序時更新，避免進度即時編輯造成跳位
+  const [displayOrder, setDisplayOrder] = useState<number[]>([]);
+  // 紀錄各列已存檔的進度，blur 時用來判斷是否真的有修改
+  const committedProgressRef = useRef<Map<number, string>>(new Map());
+
+  const setSortBy = (next: 'date' | 'name') => {
+    setSortByState(next);
+    setDisplayOrder(computeOrder(list, next));
+  };
 
   // 計算過濾後的清單
   const filteredList = useMemo(() => {
@@ -34,14 +53,13 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         item.name.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    if (sortBy === 'name') {
-      result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
-    } else {
-      // 依最後更新時間由新到舊；GAS 可能回傳 ISO 字串或 yyyy/MM/dd
-      result = [...result].sort((a, b) => parseDate(b.date) - parseDate(a.date));
-    }
-    return result;
-  }, [list, searchQuery, sortBy]);
+    const orderMap = new Map(displayOrder.map((row, idx) => [row, idx]));
+    return [...result].sort((a, b) => {
+      const ia = orderMap.get(a.rowNumber);
+      const ib = orderMap.get(b.rowNumber);
+      return (ia ?? Infinity) - (ib ?? Infinity);
+    });
+  }, [list, searchQuery, displayOrder]);
 
   const fetchData = async (sheetOverride?: string): Promise<AnimeItem[]> => {
     const sheet = sheetOverride || currentAccount;
@@ -68,6 +86,10 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
             favorite: row[4] === true || row[4] === 'TRUE',
           })).filter((item: AnimeItem) => item.name);
         setList(mappedData);
+        setDisplayOrder(computeOrder(mappedData, sortBy));
+        const committed = new Map<number, string>();
+        mappedData.forEach((i: AnimeItem) => committed.set(i.rowNumber, i.progress));
+        committedProgressRef.current = committed;
         return mappedData;
       }
       return [];
@@ -195,6 +217,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         }),
       });
       if (!res.ok) throw new Error('Update failed');
+      committedProgressRef.current.set(item.rowNumber, newProgress);
     } catch (err) {
       console.error(err);
       fetchData();
@@ -257,11 +280,17 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   };
 
   const handleInputBlur = (item: AnimeItem) => {
-    if (item.progress === '') {
-      handleProgressUpdate(item, '0');
-    } else {
-      handleProgressUpdate(item, item.progress);
+    const next = item.progress === '' ? '0' : item.progress;
+    // 與已存檔值相同就不送 POST、也不更新日期；空字串歸零僅本地處理
+    if (next === committedProgressRef.current.get(item.rowNumber)) {
+      if (item.progress === '') {
+        setList(prev => prev.map(i =>
+          i.rowNumber === item.rowNumber ? { ...i, progress: '0' } : i
+        ));
+      }
+      return;
     }
+    handleProgressUpdate(item, next);
   };
 
   const handleDeleteAccount = async (handleLogout: () => void) => {
