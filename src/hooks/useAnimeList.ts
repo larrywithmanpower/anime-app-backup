@@ -5,6 +5,13 @@ import { AnimeItem } from '@/types/anime';
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
+// 將日期字串轉成毫秒；無效或空值回傳 0（排到最後）
+const parseDate = (raw: string): number => {
+  if (!raw) return 0;
+  const t = new Date(raw.includes('T') ? raw : raw.replace(/\//g, '-')).getTime();
+  return Number.isNaN(t) ? 0 : t;
+};
+
 export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const [list, setList] = useState<AnimeItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -29,8 +36,10 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     }
     if (sortBy === 'name') {
       result = [...result].sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
+    } else {
+      // 依最後更新時間由新到舊；GAS 可能回傳 ISO 字串或 yyyy/MM/dd
+      result = [...result].sort((a, b) => parseDate(b.date) - parseDate(a.date));
     }
-    // sortBy === 'date' 保持 GAS 回傳的日期順序
     return result;
   }, [list, searchQuery, sortBy]);
 
