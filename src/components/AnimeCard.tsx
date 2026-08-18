@@ -36,7 +36,8 @@ const AnimeCard = React.memo(function AnimeCard({
   const current = parseInt(item.progress, 10);
   const total = parseInt(item.totalEpisodes, 10);
   const hasTotal = !Number.isNaN(total) && total > 0;
-  const isNumeric = /^\d+$/.test(item.progress);
+  // 已完結就不再提供加減集數，避免卡片同時說「已完結」又擺著 ＋ 誘人再按
+  const isNumeric = /^\d+$/.test(item.progress) && item.status !== 'done';
   const percent = hasTotal && !Number.isNaN(current) ? Math.min(100, (current / total) * 100) : 0;
   const caughtUp = hasTotal && !Number.isNaN(current) && current >= total;
 
@@ -97,7 +98,12 @@ const AnimeCard = React.memo(function AnimeCard({
 
         {/* 進度條：沒填總集數就只顯示目前集數，不畫空條誤導 */}
         <div className="flex items-center gap-2">
-          {hasTotal ? (
+          {item.status === 'done' ? (
+            // 已完結就別再顯示「第 0 集」或「未設定」，看完了就是看完了
+            <span className="text-[12px] text-success">
+              已完結{hasTotal ? ` · 全 ${total} 集` : ''}
+            </span>
+          ) : hasTotal ? (
             <>
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-line">
                 <div
@@ -113,8 +119,14 @@ const AnimeCard = React.memo(function AnimeCard({
             </>
           ) : (
             // 文字進度（如「第二季 完」）給整行寬度，不擠在右側控制區裡被截斷
-            <span className={`text-[12px] ${isNumeric ? 'tnum text-faint' : 'break-words text-dim'}`}>
-              {isNumeric ? `第 ${item.progress || 0} 集` : item.progress || '未設定'}
+            <span className={`text-[12px] ${isNumeric ? 'tnum text-dim' : 'break-words text-dim'}`}>
+              {isNumeric ? (
+                <>
+                  第 <span className="text-[13px] font-semibold text-text">{item.progress || 0}</span> 集
+                </>
+              ) : (
+                item.progress || '未設定'
+              )}
             </span>
           )}
         </div>

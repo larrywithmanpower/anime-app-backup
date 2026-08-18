@@ -20,8 +20,9 @@
 
   /* 文字階層 */
   --text: #ededf0;
-  --dim: #a1a1aa;
-  --faint: #6b6b75;
+  --dim: #adadb8;
+  /* 深底上的低對比字很吃虧，faint 只用於真正的次要資訊，不要再往下調 */
+  --faint: #85858f;
 
   --background: var(--bg);
   --foreground: var(--text);

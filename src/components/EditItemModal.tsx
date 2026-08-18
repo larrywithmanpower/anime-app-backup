@@ -181,32 +181,41 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className={labelClass}>目前進度</label>
-            <input
-              type="text"
-              value={progress}
-              onChange={e => setProgress(e.target.value)}
-              className={`${fieldClass} tnum`}
-            />
-          </div>
-          <div>
-            <label className={labelClass}>總集數</label>
-            <input
-              type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={totalEpisodes}
-              onChange={e => setTotalEpisodes(e.target.value)}
-              placeholder="未定"
-              className={`${fieldClass} tnum`}
-            />
-          </div>
-        </div>
-        <p className="-mt-1 text-[11px] leading-relaxed text-faint">
-          進度改成純數字才會有 ＋／－ 按鈕；再填總集數就會出現進度條與「已追平」提示
-        </p>
+        {/* 標成完結就不必再交代看到第幾集，少一個要煩惱的欄位 */}
+        {status === 'done' ? (
+          <p className="rounded-lg border border-line bg-bg px-3 py-2.5 text-[12px] text-dim">
+            已完結的作品不用填進度
+          </p>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={labelClass}>目前進度</label>
+                <input
+                  type="text"
+                  value={progress}
+                  onChange={e => setProgress(e.target.value)}
+                  className={`${fieldClass} tnum`}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>總集數（可留空）</label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={totalEpisodes}
+                  onChange={e => setTotalEpisodes(e.target.value)}
+                  placeholder="長篇連載留空"
+                  className={`${fieldClass} tnum`}
+                />
+              </div>
+            </div>
+            <p className="-mt-1 text-[11px] leading-relaxed text-faint">
+              平常加集數用卡片上的 ＋ 就好。總集數只有集數固定的作品才需要填，填了會出現進度條與「已追平」提示
+            </p>
+          </>
+        )}
 
         <div>
           <label className={labelClass}>狀態</label>

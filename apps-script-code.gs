@@ -193,9 +193,10 @@ function updateMeta(ss, sheetName, row, data) {
   // 有明確帶 date 就以它為準（資料整理時用來保住原本的最後觀看日期）
   var explicitDate = data.date !== undefined && data.date !== null;
 
-  // 「最後更新時間」代表最後看到哪一集，只有進度真的變了才動它。
-  // 改封面、改名稱、切狀態都只是整理資料，不該讓它跳到清單最前面。
+  // 「最後更新時間」代表最後看到哪一集，只有進度真的往前才動它。
+  // 改封面、改名稱、切狀態都只是整理資料；清空進度（標記完結時常見）也不算看了新的一集。
   var progressChanged = data.progress !== undefined && data.progress !== null
+    && String(data.progress) !== ''
     && String(data.progress) !== previousProgress;
 
   if (!explicitDate && progressChanged) {
