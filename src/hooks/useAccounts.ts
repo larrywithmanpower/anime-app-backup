@@ -105,16 +105,18 @@ export function useAccounts() {
         redirect: 'follow',
         body: JSON.stringify({ action: 'createSheet', name: name }),
       });
-      if (res.ok) {
-        setShowCreateAccount(false);
-        await fetchAccountList();
-        setCurrentAccount(name);
-        localStorage.setItem('lastAccount', name);
-        setIsLoggedIn(true);
-      } else {
-        const error = await res.json();
-        setLoginError(error.error || '建立失敗');
+      // GAS 失敗時仍回 HTTP 200，錯誤放在 body，只看 res.ok 會誤判成功
+      const result = await res.json();
+      if (!res.ok || result?.error) {
+        setLoginError(result?.error || '建立失敗');
+        return;
       }
+
+      setShowCreateAccount(false);
+      await fetchAccountList();
+      setCurrentAccount(name);
+      localStorage.setItem('lastAccount', name);
+      setIsLoggedIn(true);
     } catch {
       setLoginError('網路錯誤，請稍後再試');
     } finally {

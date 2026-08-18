@@ -1,18 +1,29 @@
 /**
  * ANIME TRACKER BACKEND
- * 
+ *
  * 重要：更新代碼後，請點擊「部署 > 管理部署 > 編輯 (鉛筆) > 版本：全新版本 > 部署」
+ *
+ * Schema（9 欄）：
+ *   A=最後更新時間  B=作品名稱  C=目前進度  D=總集數  E=狀態
+ *   F=觀看連結      G=封面圖    H=BangumiID  I=類型
+ *
+ * 舊帳號相容：D 欄原為「最新進度(AI)」、E 欄原為「追蹤(TRUE/FALSE)」，
+ * 兩欄已改用途。讀取時由前端寬鬆解析（D 非純數字視為空、E 非合法狀態視為 watching），
+ * 不需要手動清理舊資料。
  */
+
+var COLUMN_COUNT = 9;
+var HEADERS = ['最後更新時間', '作品名稱', '目前進度', '總集數', '狀態', '觀看連結', '封面圖', 'BangumiID', '類型'];
 
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = (e && e.parameter && e.parameter.action) ? e.parameter.action : "getData";
-    
+
     if (action === "getSheets") {
       return response(listAllSheets(ss));
     }
-    
+
     // 預設抓取資料
     var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : null;
     return response(getSheetData(ss, sheetName));
@@ -26,13 +37,13 @@ function doPost(e) {
   try {
     var data = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    
+
     if (data.action === "createSheet") {
       return response(createNewAccount(ss, data.name));
     }
 
     if (data.action === "addItem") {
-      return response(addNewItem(ss, data.sheet, data.name));
+      return response(addNewItem(ss, data.sheet, data));
     }
 
     if (data.action === "deleteItem") {
@@ -43,22 +54,19 @@ function doPost(e) {
       return response(updateProgress(ss, data.sheet, data.row, data.progress));
     }
 
+    if (data.action === "updateMeta") {
+      return response(updateMeta(ss, data.sheet, data.row, data));
+    }
+
+    // 舊版前端相容：只改名稱
     if (data.action === "updateName") {
-      return response(updateName(ss, data.sheet, data.row, data.name));
+      return response(updateMeta(ss, data.sheet, data.row, {name: data.name}));
     }
 
     if (data.action === "deleteAccount") {
       return response(deleteAccount(ss, data.sheet));
     }
 
-    if (data.action === "updateLatestBatch") {
-      return response(updateLatestBatch(ss, data.sheet, data.updates));
-    }
-
-    if (data.action === "toggleFavorite") {
-      return response(toggleFavorite(ss, data.sheet, data.row, data.favorite));
-    }
-    
     throw new Error("未知動作: " + data.action);
 
   } catch (err) {
@@ -72,41 +80,48 @@ function listAllSheets(ss) {
   return ss.getSheets().map(function(s) { return s.getName(); });
 }
 
+// 確保分頁至少有 COLUMN_COUNT 欄，且表頭正確
+function ensureSchema(sheet) {
+  if (sheet.getMaxColumns() < COLUMN_COUNT) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), COLUMN_COUNT - sheet.getMaxColumns());
+  }
+
+  var headerRange = sheet.getRange(1, 1, 1, COLUMN_COUNT);
+  var current = headerRange.getValues()[0];
+
+  // 只要有任一格對不上就整行重寫（舊 5 欄帳號會在此自動升級）
+  for (var i = 0; i < COLUMN_COUNT; i++) {
+    if (current[i] !== HEADERS[i]) {
+      headerRange.setValues([HEADERS]);
+      sheet.setFrozenRows(1);
+      return;
+    }
+  }
+}
+
 function getSheetData(ss, sheetName) {
   var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
   if (!sheet) throw new Error("找不到分頁: " + (sheetName || "第一個分頁"));
-  
-  // 強制檢查第一列 A1 到 E1
-  var headerRange = sheet.getRange(1, 1, 1, 5);
-  var headers = headerRange.getValues()[0];
-  
-  // 如果最後一格不是「追蹤」，強制更新整行表頭
-  if (headers[4] !== "追蹤") {
-    var standardHeaders = [["最後更新時間", "作品名稱", "目前進度", "最新進度(AI)", "追蹤"]];
-    headerRange.setValues(standardHeaders);
-    sheet.setFrozenRows(1); // 確保標題列被凍結
-  }
-  
-  // 強制返回 A 到 E 共 5 欄數據，確保前端索引不偏移
+
+  ensureSchema(sheet);
+
   var lastRow = sheet.getLastRow();
   if (lastRow < 1) return [];
-  return sheet.getRange(1, 1, lastRow, 5).getValues();
+  return sheet.getRange(1, 1, lastRow, COLUMN_COUNT).getValues();
 }
 
 function createNewAccount(ss, name) {
   if (ss.getSheetByName(name)) throw new Error("帳號 「" + name + "」 已經存在");
   var newSheet = ss.insertSheet(name);
-  // 固定標題列：最後更新時間, 作品名稱, 目前進度, 最新進度(AI), 追蹤
-  var headers = [["最後更新時間", "作品名稱", "目前進度", "最新進度(AI)", "追蹤"]];
-  newSheet.getRange(1, 1, 1, 5).setValues(headers);
-  newSheet.setFrozenRows(1); // 凍結第一列
+  newSheet.getRange(1, 1, 1, COLUMN_COUNT).setValues([HEADERS]);
+  newSheet.setFrozenRows(1);
   return {success: true, name: name};
 }
 
 function deleteAccount(ss, name) {
   var sheet = ss.getSheetByName(name);
   if (!sheet) throw new Error("找不到該帳號: " + name);
-  
+
   // 至少保留一個分頁
   if (ss.getSheets().length <= 1) {
     throw new Error("無法刪除唯一的帳號，請至少保留一個分頁");
@@ -116,119 +131,109 @@ function deleteAccount(ss, name) {
   return {success: true};
 }
 
+function getSheetOrThrow(ss, sheetName) {
+  var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
+  if (!sheet) throw new Error("找不到分頁: " + sheetName);
+  return sheet;
+}
+
+function today() {
+  return Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd");
+}
+
 function updateProgress(ss, sheetName, row, progress) {
-  var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
+  var sheet = getSheetOrThrow(ss, sheetName);
+
   var rowIndex = parseInt(row);
   if (rowIndex <= 1) throw new Error("無效的操作：禁止修改標題列");
-  
+
   sheet.getRange(rowIndex, 3).setValue(progress);
-  sheet.getRange(rowIndex, 1).setValue(Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd"));
+  sheet.getRange(rowIndex, 1).setValue(today());
   return {success: true};
 }
 
-function updateName(ss, sheetName, row, newName) {
-  var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
+/**
+ * 更新單列的中繼資料。只寫有帶進來的欄位（undefined 代表不動）。
+ * 支援：name / totalEpisodes / status / watchUrl / coverImage / bangumiId
+ */
+function updateMeta(ss, sheetName, row, data) {
+  var sheet = getSheetOrThrow(ss, sheetName);
 
   var rowIndex = parseInt(row);
   if (rowIndex <= 1) throw new Error("無效的操作：禁止修改標題列");
 
-  sheet.getRange(rowIndex, 2).setValue(newName);
-  sheet.getRange(rowIndex, 1).setValue(Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd"));
+  ensureSchema(sheet);
+
+  var fields = [
+    {key: 'name', col: 2},
+    {key: 'totalEpisodes', col: 4},
+    {key: 'status', col: 5},
+    {key: 'watchUrl', col: 6},
+    {key: 'coverImage', col: 7},
+    {key: 'bangumiId', col: 8},
+    {key: 'category', col: 9}
+  ];
+
+  var touched = false;
+  for (var i = 0; i < fields.length; i++) {
+    var value = data[fields[i].key];
+    if (value !== undefined && value !== null) {
+      sheet.getRange(rowIndex, fields[i].col).setValue(value);
+      touched = true;
+    }
+  }
+
+  if (!touched) throw new Error("updateMeta 沒有帶任何可更新欄位");
+
+  // 只有改到「狀態」以外的內容才更新時間戳；切換狀態不該讓它跳到清單最前面
+  if (data.status === undefined || fields.some(function(f) {
+    return f.key !== 'status' && data[f.key] !== undefined && data[f.key] !== null;
+  })) {
+    sheet.getRange(rowIndex, 1).setValue(today());
+  }
+
   return {success: true};
 }
 
-function addNewItem(ss, sheetName, itemName) {
-  var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
-  var lastRow = sheet.getLastRow();
-  var newRow = lastRow + 1;
-  var date = Utilities.formatDate(new Date(), "GMT+8", "yyyy/MM/dd");
-  
-  sheet.getRange(newRow, 1).setValue(date);
-  sheet.getRange(newRow, 2).setValue(itemName);
-  sheet.getRange(newRow, 3).setValue("0"); // Initial progress
-  
+function addNewItem(ss, sheetName, data) {
+  var sheet = getSheetOrThrow(ss, sheetName);
+  if (!data.name) throw new Error("缺少作品名稱");
+
+  ensureSchema(sheet);
+
+  var newRow = sheet.getLastRow() + 1;
+  // 表頭必定在第 1 列，資料最早從第 2 列開始
+  if (newRow < 2) newRow = 2;
+
+  var values = [[
+    today(),
+    data.name,
+    data.progress !== undefined && data.progress !== null ? String(data.progress) : "0",
+    data.totalEpisodes || "",
+    data.status || "watching",
+    data.watchUrl || "",
+    data.coverImage || "",
+    data.bangumiId || "",
+    data.category || ""
+  ]];
+
+  sheet.getRange(newRow, 1, 1, COLUMN_COUNT).setValues(values);
+
   return {success: true, rowNumber: newRow};
 }
 
 function deleteItem(ss, sheetName, row) {
-  var sheet = sheetName ? ss.getSheetByName(sheetName) : ss.getSheets()[0];
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
+  var sheet = getSheetOrThrow(ss, sheetName);
+
   var rowIndex = parseInt(row);
   if (rowIndex <= 1) throw new Error("無效的操作：禁止刪除標題列");
-  
+
   sheet.deleteRow(rowIndex);
-  
+
   return {success: true};
-}
-
-function updateLatestBatch(ss, sheetName, updates) {
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
-  var data = sheet.getDataRange().getValues();
-  
-  // 確保表格至少有 5 欄 (A:E)
-  if (sheet.getLastColumn() < 5) {
-     sheet.insertColumnsAfter(sheet.getLastColumn(), 5 - sheet.getLastColumn());
-  }
-  
-  for (var i = 0; i < updates.length; i++) {
-    var update = updates[i];
-    
-    // 優先使用 Row Number 直接定位 (更安全，不怕改名或繁簡差異)
-    if (update.row) {
-      var r = parseInt(update.row);
-      if (r > 1) { // 確保不是標題列
-         sheet.getRange(r, 4).setValue(update.latest); 
-         sheet.getRange(r, 1).setValue(new Date());
-         continue; // 已處理，跳過名稱比對
-      }
-    }
-
-    // 舊版兼容：名稱比對 (Fallback)
-    for (var j = 1; j < data.length; j++) {
-      // 使用 trim 確保名稱匹配精確
-      if (String(data[j][1]).trim() === String(update.name).trim()) {
-        sheet.getRange(j + 1, 4).setValue(update.latest); // 最新進度 (AI)
-        sheet.getRange(j + 1, 1).setValue(new Date());   // 最後更新時間
-        break;
-      }
-    }
-  }
-  return {success: true};
-}
-
-function toggleFavorite(ss, sheetName, row, isFavorite) {
-  var sheet = ss.getSheetByName(sheetName);
-  if (!sheet) throw new Error("找不到分頁: " + sheetName);
-  
-  var rowIndex = parseInt(row);
-  if (rowIndex <= 1) throw new Error("無效的操作");
-  
-  // 第 5 欄為追蹤狀態 (TRUE/FALSE)
-  sheet.getRange(rowIndex, 5).setValue(isFavorite ? "TRUE" : "FALSE");
-
-  // 如果是取消追蹤，同時清空最新進度 (第 4 欄)
-  if (!isFavorite) {
-    sheet.getRange(rowIndex, 4).clearContent();
-  }
-  
-  return {success: true, favorite: isFavorite};
 }
 
 function response(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
-}
-
-// --- 測試用函數 (可在開發者編輯器手動執行點擊「執行」來測試) ---
-function TEST_LIST_SHEETS() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-
 }

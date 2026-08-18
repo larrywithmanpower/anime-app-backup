@@ -1,9 +1,38 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { AnimeItem } from '@/types/anime';
+import { useState, useEffect, useRef } from 'react';
+import {
+  AnimeItem,
+  WatchStatus,
+  WATCH_STATUSES,
+  parseStatus,
+  parseTotalEpisodes,
+} from '@/types/anime';
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
+
+/** +/- 連按時的合併視窗；一列只會送出最後一次的值 */
+const PROGRESS_DEBOUNCE_MS = 500;
+
+const cacheKey = (account: string) => `animeCache:${account}`;
+
+export interface Toast {
+  id: number;
+  message: string;
+  tone: 'error' | 'success';
+}
+
+/** 新增 / 編輯時可帶的欄位 */
+export interface ItemDraft {
+  name: string;
+  progress?: string;
+  totalEpisodes?: string;
+  status?: WatchStatus;
+  watchUrl?: string;
+  coverImage?: string;
+  bangumiId?: string;
+  category?: string;
+}
 
 // 將日期字串轉成毫秒；無效或空值回傳 0（排到最後）
 const parseDate = (raw: string): number => {
@@ -22,112 +51,163 @@ const computeOrder = (items: AnimeItem[], by: 'date' | 'name'): number[] => {
   return sorted.map(i => i.rowNumber);
 };
 
+// GAS 回傳的原始列 → AnimeItem；D / E 欄可能殘留舊 AI 資料，一律寬鬆解析
+const mapRows = (rows: unknown[][]): AnimeItem[] =>
+  rows
+    .slice(1) // 跳過標題列
+    .map((row, index) => ({
+      rowNumber: index + 2,
+      date: String(row[0] ?? ''),
+      name: String(row[1] ?? ''),
+      progress: String(row[2] ?? ''),
+      totalEpisodes: parseTotalEpisodes(row[3]),
+      status: parseStatus(row[4]),
+      watchUrl: String(row[5] ?? ''),
+      coverImage: String(row[6] ?? ''),
+      bangumiId: String(row[7] ?? ''),
+      category: String(row[8] ?? ''),
+    }))
+    .filter(item => item.name);
+
+const todayLabel = () =>
+  new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
+
 export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const [list, setList] = useState<AnimeItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [showAddItem, setShowAddItem] = useState(false);
-  const [newItemName, setNewItemName] = useState('');
   const [itemToDelete, setItemToDelete] = useState<AnimeItem | null>(null);
-  const [itemToRename, setItemToRename] = useState<AnimeItem | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [itemToEdit, setItemToEdit] = useState<AnimeItem | null>(null);
   const [showHelp, setShowHelp] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortByState] = useState<'date' | 'name'>('date');
+  const [statusFilter, setStatusFilter] = useState<WatchStatus>('watching');
+  const [toasts, setToasts] = useState<Toast[]>([]);
   // 顯示順序快照；只在載入清單或切換排序時更新，避免進度即時編輯造成跳位
   const [displayOrder, setDisplayOrder] = useState<number[]>([]);
+
   // 紀錄各列已存檔的進度，blur 時用來判斷是否真的有修改
   const committedProgressRef = useRef<Map<number, string>>(new Map());
+  // 尚未送出的進度（debounce 中），切帳號或關頁前要 flush
+  const pendingProgressRef = useRef<Map<number, string>>(new Map());
+  const progressTimersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const toastIdRef = useRef(0);
+
+  const pushToast = (message: string, tone: Toast['tone'] = 'error') => {
+    const id = ++toastIdRef.current;
+    setToasts(prev => [...prev, { id, message, tone }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 3600);
+  };
+
+  const dismissToast = (id: number) => setToasts(prev => prev.filter(t => t.id !== id));
 
   const setSortBy = (next: 'date' | 'name') => {
     setSortByState(next);
     setDisplayOrder(computeOrder(list, next));
   };
 
-  // 計算過濾後的清單
-  const filteredList = useMemo(() => {
-    let result = list;
-    if (searchQuery) {
-      result = result.filter(item =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
+  // 各狀態的數量，供篩選列顯示
+  const statusCounts = WATCH_STATUSES.reduce<Record<WatchStatus, number>>((acc, s) => {
+    acc[s.key] = list.filter(i => i.status === s.key).length;
+    return acc;
+  }, {} as Record<WatchStatus, number>);
+
+  // 搜尋時跨狀態找（不然搜已完結的作品會找不到）；沒搜尋才套用狀態篩選
+  const filteredList = (() => {
+    const keyword = searchQuery.trim().toLowerCase();
+    const result = keyword
+      ? list.filter(item => item.name.toLowerCase().includes(keyword))
+      : list.filter(item => item.status === statusFilter);
+
     const orderMap = new Map(displayOrder.map((row, idx) => [row, idx]));
     return [...result].sort((a, b) => {
       const ia = orderMap.get(a.rowNumber);
       const ib = orderMap.get(b.rowNumber);
       return (ia ?? Infinity) - (ib ?? Infinity);
     });
-  }, [list, searchQuery, displayOrder]);
+  })();
+
+  const applyList = (items: AnimeItem[], sheet: string) => {
+    setList(items);
+    setDisplayOrder(computeOrder(items, sortBy));
+    committedProgressRef.current = new Map(items.map(i => [i.rowNumber, i.progress]));
+    try {
+      localStorage.setItem(cacheKey(sheet), JSON.stringify(items));
+    } catch {
+      // 快取寫入失敗（例如無痕模式配額）不影響主流程
+    }
+  };
 
   const fetchData = async (sheetOverride?: string): Promise<AnimeItem[]> => {
     const sheet = sheetOverride || currentAccount;
-    if (!sheet || !APPS_SCRIPT_URL) {
-      return [];
-    }
+    if (!sheet || !APPS_SCRIPT_URL) return [];
 
     setRefreshing(true);
     try {
-      const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`;
-      const res = await fetch(url);
+      const res = await fetch(`${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`);
       const rawData = await res.json();
 
-      // 映射邏輯（從 GAS 原始回應轉換）
       if (Array.isArray(rawData)) {
-        const mappedData = rawData
-          .slice(1) // 跳過標題列
-          .map((row: any[], index: number) => ({
-            rowNumber: index + 2,
-            date: row[0] || '',
-            name: row[1] || '',
-            progress: row[2] || '',
-            latest: row[3] || '',
-            favorite: row[4] === true || row[4] === 'TRUE',
-          })).filter((item: AnimeItem) => item.name);
-        setList(mappedData);
-        setDisplayOrder(computeOrder(mappedData, sortBy));
-        const committed = new Map<number, string>();
-        mappedData.forEach((i: AnimeItem) => committed.set(i.rowNumber, i.progress));
-        committedProgressRef.current = committed;
-        return mappedData;
+        const mapped = mapRows(rawData as unknown[][]);
+        applyList(mapped, sheet);
+        return mapped;
       }
+
+      pushToast(rawData?.error ? `讀取失敗：${rawData.error}` : '讀取失敗，回應格式不正確');
       return [];
     } catch (err) {
       console.error(err);
+      pushToast('連線失敗，顯示的是上次同步的內容');
       return [];
     } finally {
       setRefreshing(false);
     }
   };
 
+  const postAction = async (body: Record<string, unknown>) => {
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      redirect: 'follow',
+      body: JSON.stringify(body),
+    });
+    const result = await res.json();
+    if (!res.ok || result?.error) throw new Error(result?.error || `HTTP ${res.status}`);
+    return result;
+  };
+
   const handleManualRefresh = () => {
     fetchData();
   };
 
-  const handleAddItem = async () => {
-    if (!newItemName.trim() || !APPS_SCRIPT_URL) return;
+  const handleAddItem = async (draft: ItemDraft) => {
+    if (!draft.name.trim() || !APPS_SCRIPT_URL) return false;
     setRefreshing(true);
     try {
-      const requestBody = { action: 'addItem', sheet: currentAccount, name: newItemName.trim() };
-
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify(requestBody),
+      await postAction({
+        action: 'addItem',
+        sheet: currentAccount,
+        name: draft.name.trim(),
+        progress: draft.progress ?? '0',
+        totalEpisodes: draft.totalEpisodes ?? '',
+        status: draft.status ?? 'watching',
+        watchUrl: draft.watchUrl ?? '',
+        coverImage: draft.coverImage ?? '',
+        bangumiId: draft.bangumiId ?? '',
+        category: draft.category ?? '',
       });
-      const result = await res.json();
-
-      if (res.ok && !result.error) {
-        setNewItemName('');
-        setShowAddItem(false);
-        fetchData();
-      } else {
-        alert('新增失敗: ' + (result.error || '未知錯誤'));
-      }
+      setShowAddItem(false);
+      // 需要拿到 Sheet 實際列號才能後續更新，因此新增後重抓
+      await fetchData();
+      pushToast(`已加入「${draft.name.trim()}」`, 'success');
+      return true;
     } catch (err) {
       console.error('Failed to add item:', err);
-      alert('網路通訊失敗，請檢查 API 連線');
+      pushToast(`新增失敗：${(err as Error).message}`);
+      return false;
     } finally {
       setRefreshing(false);
     }
@@ -137,231 +217,240 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     if (!APPS_SCRIPT_URL) return;
     setRefreshing(true);
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'deleteItem',
-          sheet: currentAccount,
-          row: item.rowNumber
-        }),
-      });
-      const result = await res.json();
-      if (res.ok && !result.error) {
-        setItemToDelete(null);
-        fetchData();
-      } else {
-        alert('刪除失敗: ' + (result.error || '未知錯誤'));
-      }
+      await postAction({ action: 'deleteItem', sheet: currentAccount, row: item.rowNumber });
+      setItemToDelete(null);
+      // 刪除會讓後面所有列號往前位移，必須重抓才能維持定位正確
+      await fetchData();
+      pushToast(`已刪除「${item.name}」`, 'success');
     } catch (err) {
       console.error('Failed to delete item:', err);
-      alert('網路傳輸失敗');
+      pushToast(`刪除失敗：${(err as Error).message}`);
     } finally {
       setRefreshing(false);
     }
   };
 
-  const handleUpdateName = async () => {
-    if (!itemToRename || !renameValue.trim() || !APPS_SCRIPT_URL) return;
-    setRefreshing(true);
+  /** 編輯 modal 送出：名稱 / 總集數 / 狀態 / 連結 / 類型 */
+  const handleUpdateMeta = async (item: AnimeItem, draft: ItemDraft) => {
+    if (!APPS_SCRIPT_URL) return false;
+
+    const patch = {
+      name: draft.name.trim(),
+      totalEpisodes: draft.totalEpisodes ?? '',
+      status: draft.status ?? item.status,
+      watchUrl: draft.watchUrl ?? '',
+      category: draft.category ?? '',
+    };
+
+    setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, ...patch } : i)));
+    setItemToEdit(null);
+
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'updateName',
-          row: itemToRename.rowNumber,
-          name: renameValue.trim(),
-          sheet: currentAccount
-        }),
+      await postAction({
+        action: 'updateMeta',
+        sheet: currentAccount,
+        row: item.rowNumber,
+        ...patch,
       });
-      const result = await res.json();
-
-      if (res.ok && !result.error) {
-        setItemToRename(null);
-        fetchData();
-      } else {
-        alert('修改名稱失敗: ' + (result.error || '未知錯誤'));
-      }
+      return true;
     } catch (err) {
-      console.error('Failed to update name:', err);
-      alert('網路傳輸失敗');
-    } finally {
-      setRefreshing(false);
+      console.error('Failed to update item:', err);
+      pushToast(`儲存失敗：${(err as Error).message}`);
+      fetchData();
+      return false;
     }
   };
 
-  const handleProgressUpdate = async (item: AnimeItem, newProgress: string) => {
+  /** 切換狀態（在追 → 完結等）；不更新時間戳，避免清單順序亂跳 */
+  const handleSetStatus = async (item: AnimeItem, status: WatchStatus) => {
     if (!APPS_SCRIPT_URL) return;
-    const newDate = new Date().toLocaleDateString('zh-TW', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).replace(/\//g, '/');
 
-    setList(prev => prev.map(i =>
-      i.rowNumber === item.rowNumber
-        ? { ...i, progress: newProgress, date: newDate }
-        : i
-    ));
+    setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, status } : i)));
 
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'update',
-          row: item.rowNumber,
-          progress: newProgress,
-          sheet: currentAccount
-        }),
-      });
-      if (!res.ok) throw new Error('Update failed');
-      committedProgressRef.current.set(item.rowNumber, newProgress);
+      await postAction({ action: 'updateMeta', sheet: currentAccount, row: item.rowNumber, status });
     } catch (err) {
-      console.error(err);
+      console.error('Failed to set status:', err);
+      pushToast(`狀態未存檔：${(err as Error).message}`);
       fetchData();
     }
   };
 
-  const handleIncrement = (item: AnimeItem) => {
-    const newProgress = (parseInt(item.progress || '0') + 1).toString();
-    handleProgressUpdate(item, newProgress);
-  };
-
-  const handleDecrement = (item: AnimeItem) => {
-    const current = parseInt(item.progress || '0');
-    if (current <= 0) return;
-    const newProgress = (current - 1).toString();
-    handleProgressUpdate(item, newProgress);
-  };
-
-  const toggleExpand = (rowNumber: number) => {
-    setExpandedItems(prev => ({
-      ...prev,
-      [rowNumber]: !prev[rowNumber]
-    }));
-  };
-
-  const handleToggleFavorite = async (item: AnimeItem) => {
-    if (!APPS_SCRIPT_URL) return;
-    const newFavorite = !item.favorite;
-
-    // 先更新本地狀態
-    setList(prev => prev.map(i =>
-      i.rowNumber === item.rowNumber
-        ? { ...i, favorite: newFavorite, latest: newFavorite ? i.latest : '' }
-        : i
-    ));
-
+  /** 實際把進度送到 GAS；失敗會明確提示，不再靜默吃掉 */
+  const commitProgress = async (rowNumber: number, progress: string) => {
+    pendingProgressRef.current.delete(rowNumber);
     try {
-      await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'toggleFavorite',
-          sheet: currentAccount,
-          row: item.rowNumber,
-          favorite: newFavorite
-        }),
+      await postAction({ action: 'update', sheet: currentAccount, row: rowNumber, progress });
+      committedProgressRef.current.set(rowNumber, progress);
+      setList(prev => {
+        const next = prev.map(i => (i.rowNumber === rowNumber ? { ...i, date: todayLabel() } : i));
+        try {
+          localStorage.setItem(cacheKey(currentAccount), JSON.stringify(next));
+        } catch {
+          // 忽略快取寫入失敗
+        }
+        return next;
       });
     } catch (err) {
-      console.error('Failed to toggle favorite:', err);
+      console.error('Failed to update progress:', err);
+      pushToast('進度沒存到雲端，請確認網路後重試');
+      fetchData();
     }
   };
 
+  /** 本地先更新、延遲送出；連按只會送最後一次 */
+  const scheduleProgressSave = (rowNumber: number, progress: string) => {
+    pendingProgressRef.current.set(rowNumber, progress);
+
+    const existing = progressTimersRef.current.get(rowNumber);
+    if (existing) clearTimeout(existing);
+
+    const timer = setTimeout(() => {
+      progressTimersRef.current.delete(rowNumber);
+      commitProgress(rowNumber, progress);
+    }, PROGRESS_DEBOUNCE_MS);
+
+    progressTimersRef.current.set(rowNumber, timer);
+  };
+
+  /** 把所有 debounce 中的進度立刻送出（切帳號 / 關分頁前） */
+  const flushPendingProgress = () => {
+    progressTimersRef.current.forEach(timer => clearTimeout(timer));
+    progressTimersRef.current.clear();
+    const pending = new Map(pendingProgressRef.current);
+    pending.forEach((progress, rowNumber) => commitProgress(rowNumber, progress));
+  };
+
+  const applyProgress = (item: AnimeItem, newProgress: string) => {
+    setList(prev =>
+      prev.map(i =>
+        i.rowNumber === item.rowNumber ? { ...i, progress: newProgress, date: todayLabel() } : i
+      )
+    );
+    scheduleProgressSave(item.rowNumber, newProgress);
+  };
+
+  const handleIncrement = (item: AnimeItem) => {
+    const current = parseInt(item.progress || '0', 10);
+    const base = Number.isNaN(current) ? 0 : current;
+    applyProgress(item, String(base + 1));
+  };
+
+  const handleDecrement = (item: AnimeItem) => {
+    const current = parseInt(item.progress || '0', 10);
+    if (Number.isNaN(current) || current <= 0) return;
+    applyProgress(item, String(current - 1));
+  };
+
   const handleInputChange = (item: AnimeItem, value: string) => {
-    // 即時更新本地狀態以保持響應性
-    setList(prev => prev.map(i =>
-      i.rowNumber === item.rowNumber
-        ? { ...i, progress: value }
-        : i
-    ));
+    // 即時更新本地狀態以保持響應性，實際送出等 blur
+    setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, progress: value } : i)));
   };
 
   const handleInputBlur = (item: AnimeItem) => {
     const next = item.progress === '' ? '0' : item.progress;
-    // 與已存檔值相同就不送 POST、也不更新日期；空字串歸零僅本地處理
+    // 與已存檔值相同就不送出、也不更新日期；空字串歸零僅本地處理
     if (next === committedProgressRef.current.get(item.rowNumber)) {
       if (item.progress === '') {
-        setList(prev => prev.map(i =>
-          i.rowNumber === item.rowNumber ? { ...i, progress: '0' } : i
-        ));
+        setList(prev =>
+          prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, progress: '0' } : i))
+        );
       }
       return;
     }
-    handleProgressUpdate(item, next);
+    applyProgress(item, next);
   };
 
   const handleDeleteAccount = async (handleLogout: () => void) => {
     if (!currentAccount || !APPS_SCRIPT_URL) return;
     setRefreshing(true);
     try {
-      const res = await fetch(APPS_SCRIPT_URL, {
-        method: 'POST',
-        redirect: 'follow',
-        body: JSON.stringify({
-          action: 'deleteAccount',
-          name: currentAccount,
-          sheet: currentAccount
-        }),
-      });
-      const result = await res.json();
-      if (res.ok && !result.error) {
-        setShowDeleteAccount(false);
-        handleLogout();
-        setList([]);
-      } else {
-        alert('刪除帳號失敗: ' + (result.error || '未知錯誤'));
-      }
+      await postAction({ action: 'deleteAccount', name: currentAccount, sheet: currentAccount });
+      localStorage.removeItem(cacheKey(currentAccount));
+      setShowDeleteAccount(false);
+      handleLogout();
+      setList([]);
     } catch (err) {
       console.error('Failed to delete account:', err);
-      alert('網路傳輸失敗');
+      pushToast(`刪除帳號失敗：${(err as Error).message}`);
     } finally {
       setRefreshing(false);
     }
   };
 
-  // 登入狀態改變時自動載入清單
+  // 登入 / 切帳號：先用本機快取秒開，再背景同步雲端
   useEffect(() => {
-    if (isLoggedIn && currentAccount) {
-      fetchData();
+    if (!isLoggedIn || !currentAccount) return;
+
+    let cached: AnimeItem[] = [];
+    try {
+      const raw = localStorage.getItem(cacheKey(currentAccount));
+      if (raw) cached = JSON.parse(raw);
+    } catch {
+      cached = [];
     }
+
+    if (cached.length) {
+      setList(cached);
+      setDisplayOrder(computeOrder(cached, sortBy));
+      committedProgressRef.current = new Map(cached.map(i => [i.rowNumber, i.progress]));
+    } else {
+      setList([]);
+      setDisplayOrder([]);
+    }
+
+    fetchData(currentAccount);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, currentAccount]);
+
+  // 切到背景或關閉分頁前，把還沒送出的進度補送
+  useEffect(() => {
+    const flush = () => {
+      if (document.visibilityState === 'hidden') flushPendingProgress();
+    };
+    document.addEventListener('visibilitychange', flush);
+    window.addEventListener('pagehide', flushPendingProgress);
+    return () => {
+      document.removeEventListener('visibilitychange', flush);
+      window.removeEventListener('pagehide', flushPendingProgress);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentAccount]);
 
   return {
     list,
     refreshing,
     showAddItem,
-    newItemName,
     itemToDelete,
-    itemToRename,
-    renameValue,
+    itemToEdit,
     showHelp,
+    showSettings,
     showDeleteAccount,
-    expandedItems,
     searchQuery,
     sortBy,
+    statusFilter,
+    statusCounts,
     filteredList,
+    toasts,
     setShowAddItem,
-    setNewItemName,
     setItemToDelete,
-    setItemToRename,
-    setRenameValue,
+    setItemToEdit,
     setShowHelp,
+    setShowSettings,
     setShowDeleteAccount,
     setSearchQuery,
     setSortBy,
+    setStatusFilter,
+    dismissToast,
+    pushToast,
     fetchData,
     handleManualRefresh,
     handleAddItem,
     handleDeleteItem,
-    handleUpdateName,
-    handleProgressUpdate,
+    handleUpdateMeta,
+    handleSetStatus,
     handleIncrement,
     handleDecrement,
-    toggleExpand,
-    handleToggleFavorite,
     handleInputChange,
     handleInputBlur,
     handleDeleteAccount,

@@ -1,135 +1,191 @@
 'use client';
 
-import React from 'react';
-import { AnimeItem } from '@/types/anime';
+import React, { useState } from 'react';
+import { AnimeItem, WatchStatus } from '@/types/anime';
+import { resolveWatchUrl } from '@/lib/watchUrl';
 
 interface AnimeCardProps {
   item: AnimeItem;
-  isExpanded: boolean;
-  onToggleExpand: (rowNumber: number) => void;
   onIncrement: (item: AnimeItem) => void;
   onDecrement: (item: AnimeItem) => void;
   onInputChange: (item: AnimeItem, value: string) => void;
   onInputBlur: (item: AnimeItem) => void;
-  onDelete: (item: AnimeItem) => void;
-  onRename: (item: AnimeItem) => void;
+  onEdit: (item: AnimeItem) => void;
+  onSetStatus: (item: AnimeItem, status: WatchStatus) => void;
 }
 
 const formatDate = (raw: string) => {
-  if (!raw) return '未知';
-  if (raw.includes('T')) {
-    return new Date(raw).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '.');
-  }
-  return raw.replace(/\//g, '.');
+  if (!raw) return '—';
+  const source = raw.includes('T') ? new Date(raw) : new Date(raw.replace(/\//g, '-'));
+  if (Number.isNaN(source.getTime())) return raw.replace(/\//g, '.');
+  return `${String(source.getMonth() + 1).padStart(2, '0')}.${String(source.getDate()).padStart(2, '0')}`;
 };
 
 const AnimeCard = React.memo(function AnimeCard({
   item,
-  isExpanded,
-  onToggleExpand,
   onIncrement,
   onDecrement,
   onInputChange,
   onInputBlur,
-  onDelete,
-  onRename,
+  onEdit,
+  onSetStatus,
 }: AnimeCardProps) {
-  const isNumericProgress = /^\d+$/.test(item.progress);
+  const [expanded, setExpanded] = useState(false);
+  const [coverFailed, setCoverFailed] = useState(false);
+
+  const current = parseInt(item.progress, 10);
+  const total = parseInt(item.totalEpisodes, 10);
+  const hasTotal = !Number.isNaN(total) && total > 0;
+  const isNumeric = /^\d+$/.test(item.progress);
+  const percent = hasTotal && !Number.isNaN(current) ? Math.min(100, (current / total) * 100) : 0;
+  const caughtUp = hasTotal && !Number.isNaN(current) && current >= total;
+
+  const watchTarget = resolveWatchUrl(item.watchUrl, item.progress);
+  const showCover = item.coverImage && !coverFailed;
 
   return (
-    <div className="star-rise group relative overflow-hidden rounded-[16px] border border-ink-border bg-ink-deep/65 backdrop-blur-xl transition-all duration-500 hover:-translate-y-0.5 hover:border-moon/40 hover:bg-ink-mist/80 hover:shadow-[0_20px_55px_-24px_var(--moon-glow)]">
-      {/* 左側金色 indicator：預設微弱、hover 點亮 */}
-      <div className="absolute left-0 top-3 bottom-3 w-[2px] rounded-full bg-gradient-to-b from-transparent via-moon/40 to-transparent transition-opacity duration-500 group-hover:via-moon/90" />
-
-      {/* 頂部金光線：hover 浮現 */}
-      <div className="absolute inset-x-6 top-0 h-px bg-gradient-to-r from-transparent via-moon/60 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-
-      <div className="relative p-4 pl-[18px]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="relative min-w-0 flex-1 pr-8">
-            <h3
-              onClick={() => onToggleExpand(item.rowNumber)}
-              className={`font-display mb-1.5 cursor-pointer select-none text-[16px] font-bold leading-[1.4] text-mist transition-opacity active:opacity-60 ${
-                isExpanded ? 'break-words' : 'line-clamp-2'
-              }`}
-              title={item.name}
-            >
-              {item.name}
-            </h3>
-
-            <div className="font-mono flex items-center gap-1.5 text-[11px] tracking-[0.15em] text-mist-silver">
-              <span className="inline-block h-1 w-1 rounded-full bg-moon" />
-              {formatDate(item.date)}
-            </div>
-
-            <button
-              onClick={() => onRename(item)}
-              className="absolute right-0 top-1/2 -translate-y-1/2 p-1 text-mist-silver transition-all hover:text-star active:scale-90"
-              title="修改名稱"
-              aria-label="修改名稱"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                <path d="M12 20h9" />
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-              </svg>
-            </button>
+    <div className="fade-up group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-hi hover:bg-surface-hi">
+      {/* 封面：Bangumi 沒圖或載入失敗時退成首字，維持版面對齊 */}
+      <div className="h-[74px] w-[52px] shrink-0 overflow-hidden rounded-md border border-line bg-bg">
+        {showCover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={item.coverImage}
+            alt=""
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            className="h-full w-full object-cover"
+            onError={() => setCoverFailed(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[18px] font-semibold text-faint">
+            {item.name.slice(0, 1)}
           </div>
+        )}
+      </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <div className="flex items-center rounded-xl border border-ink-border bg-ink-black/85 transition-colors group-hover:border-moon/35">
-              {isNumericProgress && (
-                <button
-                  onClick={() => onDecrement(item)}
-                  className="flex h-10 w-7 items-center justify-center text-mist-silver transition-all hover:text-mist active:scale-75"
-                  aria-label="減少"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
-              )}
-              <div className="flex min-w-[38px] flex-col items-center px-0.5 py-0.5">
-                <span className="text-[7px] font-medium uppercase leading-none tracking-[0.35em] text-moon-soft">
-                  {isNumericProgress ? 'EP' : 'ST'}
-                </span>
-                <input
-                  type="text"
-                  value={item.progress}
-                  onChange={(e) => onInputChange(item, e.target.value)}
-                  onBlur={() => onInputBlur(item)}
-                  onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-                  className={`${
-                    isNumericProgress ? 'w-10' : 'min-w-[44px] max-w-[100px] px-0.5'
-                  } font-mono mt-0.5 bg-transparent text-center text-[15px] font-bold tracking-tight text-moon transition-all focus:outline-none`}
+      <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
+        <div className="flex items-start gap-2">
+          <h3
+            onClick={() => setExpanded(v => !v)}
+            title={item.name}
+            className={`min-w-0 flex-1 cursor-pointer text-[15px] font-semibold leading-snug text-text ${
+              expanded ? 'break-words' : 'line-clamp-2'
+            }`}
+          >
+            {item.name}
+          </h3>
+          {item.category && (
+            <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] leading-none text-faint">
+              {item.category}
+            </span>
+          )}
+        </div>
+
+        {/* 進度條：沒填總集數就只顯示目前集數，不畫空條誤導 */}
+        <div className="flex items-center gap-2">
+          {hasTotal ? (
+            <>
+              <div className="h-1 flex-1 overflow-hidden rounded-full bg-line">
+                <div
+                  className={`h-full rounded-full transition-[width] duration-300 ${
+                    caughtUp ? 'bg-success' : 'bg-accent'
+                  }`}
+                  style={{ width: `${percent}%` }}
                 />
               </div>
-              {isNumericProgress && (
-                <button
-                  onClick={() => onIncrement(item)}
-                  className="flex h-10 w-7 items-center justify-center text-moon transition-all hover:text-moon-soft active:scale-75"
-                  aria-label="增加"
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3">
-                    <line x1="12" y1="5" x2="12" y2="19" />
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                  </svg>
-                </button>
-              )}
-            </div>
+              <span className="tnum shrink-0 text-[11px] text-dim">
+                {item.progress || 0} / {total}
+              </span>
+            </>
+          ) : (
+            <span className="tnum text-[11px] text-faint">
+              {isNumeric ? `第 ${item.progress || 0} 集` : item.progress || '未設定'}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <span className="tnum shrink-0 text-[11px] text-faint">{formatDate(item.date)}</span>
+
+          {watchTarget && (
+            <a
+              href={watchTarget}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[11px] text-dim transition-colors hover:border-accent hover:text-accent-hi"
+              title={watchTarget}
+            >
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-2.5 w-2.5">
+                <path d="M6 4l14 8-14 8z" />
+              </svg>
+              看
+            </a>
+          )}
+
+          <div className="ml-auto flex items-center gap-1">
+            {isNumeric && (
+              <button
+                onClick={() => onDecrement(item)}
+                className="flex h-9 w-8 items-center justify-center rounded-md text-dim transition-colors hover:bg-line hover:text-text active:scale-95"
+                aria-label="減少一集"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-3.5 w-3.5">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            )}
+
+            <input
+              type="text"
+              inputMode={isNumeric ? 'numeric' : 'text'}
+              pattern={isNumeric ? '[0-9]*' : undefined}
+              value={item.progress}
+              onChange={e => onInputChange(item, e.target.value)}
+              onBlur={() => onInputBlur(item)}
+              onKeyDown={e => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+              className={`tnum h-9 rounded-md border border-transparent bg-transparent text-center text-[15px] font-semibold text-text transition-colors focus:border-line-hi focus:bg-bg focus:outline-none ${
+                isNumeric ? 'w-11' : 'w-[84px] px-1 text-[13px]'
+              }`}
+              aria-label="目前進度"
+            />
+
+            {isNumeric && (
+              <button
+                onClick={() => onIncrement(item)}
+                className="flex h-9 w-8 items-center justify-center rounded-md bg-accent-soft text-accent-hi transition-colors hover:bg-accent hover:text-white active:scale-95"
+                aria-label="增加一集"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-3.5 w-3.5">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+              </button>
+            )}
 
             <button
-              onClick={() => onDelete(item)}
-              className="p-1.5 text-mist-silver transition-all hover:text-cinnabar active:scale-90"
-              title="刪除項次"
-              aria-label="刪除"
+              onClick={() => onEdit(item)}
+              className="flex h-9 w-8 items-center justify-center rounded-md text-faint transition-colors hover:bg-line hover:text-text active:scale-95"
+              aria-label="編輯"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+                <circle cx="12" cy="5" r="1.6" />
+                <circle cx="12" cy="12" r="1.6" />
+                <circle cx="12" cy="19" r="1.6" />
               </svg>
             </button>
           </div>
         </div>
+
+        {/* 追平總集數時直接給一鍵收尾，省得再開編輯視窗 */}
+        {caughtUp && item.status === 'watching' && (
+          <button
+            onClick={() => onSetStatus(item, 'done')}
+            className="self-start rounded-md border border-success/40 bg-success/10 px-2 py-1 text-[11px] text-success transition-colors hover:bg-success/20"
+          >
+            已追平 · 標為完結
+          </button>
+        )}
       </div>
     </div>
   );

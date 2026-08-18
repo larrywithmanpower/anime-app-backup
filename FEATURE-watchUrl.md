@@ -1,5 +1,11 @@
 # watchUrl 功能規劃
 
+> ✅ **已於 2026-08-18 實作完成**，程式碼見 `src/lib/watchUrl.ts` 與 `SettingsModal.tsx`。
+> 本文保留當初的方案取捨紀錄，實作與規劃的差異：
+> - Sheet 欄位落在 **F 欄**（D / E 欄同時改為總集數與狀態，schema 擴為 9 欄）
+> - `RenameModal` 改造為 `EditItemModal`（不叫 EditModal），同時管名稱、總集數、狀態、類型、連結
+> - 新增流程改由 Bangumi 搜尋帶入，連結欄位在新增與編輯兩處都有
+
 > 與 Claude 在 2026-05-12 討論的方案。之後接續做時直接照這份走。
 
 ---

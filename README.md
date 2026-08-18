@@ -1,61 +1,52 @@
-# 📺 Anime Tracker (Next.js + Google Sheets)
+# 📺 追番進度 (Next.js + Google Sheets)
 
 **🔗 Live Demo:** [https://larrywithmanpower.github.io/anime-app-backup/](https://larrywithmanpower.github.io/anime-app-backup/)
 
-這是一個極簡、美觀且強大的動畫追蹤應用程式。它使用 **Next.js** 驅動前端，並以 **Google Sheets** 作為資料庫（透過 Google Apps Script 連接）。
+動畫、日韓歐美劇、漫畫的追看進度管理。前端 **Next.js**（static export），資料庫是 **Google Sheets**（透過 Google Apps Script 連接），作品資訊來自 **Bangumi**。全部走免費額度，沒有自建後端、沒有 API 金鑰。
 
-## ✨ 功能亮點
+## ✨ 功能
 
-- **多帳號支援**：支援建立多個獨立帳號（分頁），資料互不干擾。
-- **即時搜尋與排序**：支援關鍵字搜尋，以及依日期或名稱切換排序。
-- **排版優化與交互**：自動截斷長標題以維持排版整齊，支援「點擊展開」查看完整名稱。
-- **樂觀更新**：集數增減與名稱修改即時反應於 UI，背景同步至 Google Sheets。
-
----
+- **搜尋新增**：輸入名稱自動搜尋 Bangumi，選中後帶入封面、總集數與類型；搜不到可手動建立
+- **狀態分類**：在追 / 待看 / 完結 / 棄追，預設只顯示「在追」，清單再多也不會被淹沒
+- **進度條**：填了總集數就顯示 `8 / 24` 與進度條，追平時直接給「標為完結」
+- **快速觀看**：存 gimy 網址後，卡片的「看」會自動帶下一集；換網域只要改設定裡的一個值
+- **秒開**：先用本機快取渲染，再背景同步雲端
+- **多帳號**：每個帳號對應一張 Sheet 分頁，資料互不干擾
 
 ## 🛠️ 使用說明
 
-### 1. 帳號管理
-- **登入/建立**：
-    - 在首頁輸入您想要的名稱（例如：`larry`）點擊**登入**。
-    - 若帳號不存在，可點擊「建立新帳號」，系統會自動在 Google Sheets 建立對應分頁。
-- **刪除帳號**：
-    - 點擊標題下方的「[ 註銷帳號 ]」。
-    - **注意**：這會永久刪除 Google Sheets 中該分頁的所有資料。
+### 帳號
+- 首頁輸入名稱登入；不存在可點「建立新帳號」，會自動建立對應的 Sheets 分頁
+- 登出與註銷都在右上角 ⚙ 設定裡
 
-### 2. 動畫追蹤
-- **新增項目**：點擊右上角的 `+` 按鈕。
-- **調整進度**：點擊卡片上的 `＋` `－` 或直接輸入數字，離開輸入框後自動同步。
-- **搜尋與排序**：透過標頭的搜尋框篩選，點擊右側按鈕在「日期」與「名稱」排序間切換。
-- **查看長名稱**：若名稱被截斷，**直接點擊動畫標題** 即可展開顯示完整名稱，再次點擊可收合。
-- **修改名稱**：點擊動畫標題旁的「筆」圖示。
-- **刪除項目**：點擊卡片右側的小垃圾桶。
-- **重新整理**：點擊右上角的循環箭頭同步雲端最新資料。
+### 記錄進度
+- 卡片上的 `＋` `－` 或直接輸入數字，連按只會送出最後一次
+- 搜尋會**跨全部狀態**尋找，不受目前篩選影響
+- 看完的作品改成「完結」而不是刪除，之後還查得到
 
----
+### 觀看連結
+- 編輯作品時貼上 gimy 作品頁網址，卡片會出現「看」直接跳下一集
+- 其他平台網址也能貼，只是不會自動帶集數
+- gimy 換網域時到 ⚙ 設定改一次即可全部生效（設定存在本機，換裝置要重設）
 
-## 🚀 部署指南 (GitHub Pages)
+## 🚀 部署
 
-### 第一步：在 GitHub 設定環境變數
-1. 進入 GitHub Repo 的 **Settings > Secrets and variables > Actions**。
-2. 建立新 Secret：
-   - **Name**: `NEXT_PUBLIC_APPS_SCRIPT_URL`
-   - **Value**: (您的 Google Apps Script 網頁應用程式 URL)
+### 1. GitHub Secret
+Repo **Settings > Secrets and variables > Actions** 新增：
+- Name: `NEXT_PUBLIC_APPS_SCRIPT_URL`
+- Value: 你的 Google Apps Script 網頁應用程式 URL
 
-### 第二步：推送程式碼
-```bash
-git add .
-git commit -m "deploy: finalize project for github pages"
-git push origin main
-```
+### 2. 推送
+Push 到 `main` 會觸發 `.github/workflows/nextjs.yml` 自動建置並發佈到 GitHub Pages。
+（Repo **Settings > Pages > Source** 需選 **GitHub Actions**）
 
-### 第三步：啟用 GitHub Actions 部署
-1. 進入 Repo 的 **Settings > Pages**。
-2. **Build and deployment > Source** 選擇 **GitHub Actions**。
-3. 稍等幾分鐘，Action 運行綠燈後即可在提供的 URL 查看網頁。
+### 3. 部署 Apps Script（改動 `.gs` 時必做）
+1. 開 [script.google.com](https://script.google.com) 找到對應專案
+2. 貼上 `apps-script-code.gs` 的內容
+3. **部署 > 管理部署 > 編輯（鉛筆）> 版本：全新版本 > 部署**
 
----
+## 📝 技術備註
 
-## 📝 技術備份
-- **Google Apps Script** 原始碼備份於專案根目錄的 `apps-script-code.gs`。
-- 本專案已開啟 **Static Export** 模式，請勿手動移除 `next.config.js` 中的 `output: 'export'`。
+- 本機開發需在 `.env.local` 設定 `NEXT_PUBLIC_APPS_SCRIPT_URL`
+- 已開啟 **Static Export**，請勿移除 `next.config.js` 的 `output: 'export'`
+- Sheets schema 為 9 欄，欄位順序與相容性說明見 `CLAUDE.md`
