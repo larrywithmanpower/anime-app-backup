@@ -21,6 +21,7 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
   const [results, setResults] = useState<BangumiResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const [name, setName] = useState('');
   const [progress, setProgress] = useState('0');
@@ -55,6 +56,8 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
       try {
         const found = await searchBangumi(trimmed, controller.signal);
         setResults(found);
+        // 換關鍵字後結果整批換掉，展開狀態不該留在新清單上
+        setExpandedId(null);
       } catch (err) {
         if ((err as Error).name === 'AbortError') return;
         console.error(err);
@@ -132,42 +135,84 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
 
           {!searching &&
             results.map(result => (
-              <button
+              <div
                 key={result.id}
-                onClick={() => pickResult(result)}
-                className="flex w-full gap-2.5 rounded-lg border border-line bg-bg p-2 text-left transition-colors hover:border-accent hover:bg-surface-hi"
+                className="rounded-lg border border-line bg-bg transition-colors hover:border-accent"
               >
-                <div className="h-[58px] w-[42px] shrink-0 overflow-hidden rounded border border-line bg-surface">
-                  {result.cover && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={result.cover}
-                      alt=""
-                      loading="lazy"
-                      referrerPolicy="no-referrer"
-                      className="h-full w-full object-cover"
-                    />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-semibold text-text">
-                    {result.nameCn || result.name}
-                  </p>
-                  {result.nameCn && result.name !== result.nameCn && (
-                    <p className="truncate text-[11px] text-faint">{result.name}</p>
-                  )}
-                  <p className="tnum mt-1 text-[11px] text-dim">
-                    {[
-                      result.category,
-                      result.episodes > 0 ? `${result.episodes} 集` : '集數未定',
-                      result.date?.slice(0, 4),
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </p>
-                </div>
-              </button>
+                <button
+                  onClick={() => pickResult(result)}
+                  className="flex w-full gap-2.5 p-2 text-left"
+                >
+                  <div className="h-[58px] w-[42px] shrink-0 overflow-hidden rounded border border-line bg-surface">
+                    {result.cover && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={result.cover}
+                        alt=""
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">
+                        {result.nameCn || result.name}
+                      </p>
+                      {/* 人數一起顯示：Bangumi 非動畫作品常只有十幾人評分，藏起來反而會讓人誤信 */}
+                      {result.score > 0 && (
+                        <span className="tnum shrink-0 text-[11px] text-warn">
+                          ★ {result.score.toFixed(1)}
+                          <span className="text-faint"> ({result.ratingCount})</span>
+                        </span>
+                      )}
+                    </div>
+                    {result.nameCn && result.name !== result.nameCn && (
+                      <p className="truncate text-[11px] text-faint">{result.name}</p>
+                    )}
+                    <p className="tnum mt-1 text-[11px] text-dim">
+                      {[
+                        result.category,
+                        result.episodes > 0 ? `${result.episodes} 集` : '集數未定',
+                        result.date?.slice(0, 4),
+                      ]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </div>
+                </button>
+
+                {/* 簡介另開一顆按鈕，避免想看劇情卻誤選了作品 */}
+                {result.summary && (
+                  <button
+                    onClick={() => setExpandedId(id => (id === result.id ? null : result.id))}
+                    className="w-full px-2 pb-2 text-left"
+                  >
+                    <p
+                      className={`text-[11px] leading-relaxed text-dim ${
+                        expandedId === result.id ? '' : 'line-clamp-2'
+                      }`}
+                    >
+                      {result.summary}
+                    </p>
+                    <span className="mt-0.5 inline-block text-[11px] text-accent-hi">
+                      {expandedId === result.id ? '收合' : '看劇情'}
+                    </span>
+                  </button>
+                )}
+              </div>
             ))}
+
+          {/* 搜不到時要講清楚為什麼，否則會被誤會成「這個站沒有韓劇」 */}
+          {!searching && !searchError && keyword.trim() && results.length === 0 && (
+            <p className="rounded-lg border border-line bg-bg px-3 py-2.5 text-[12px] leading-relaxed text-dim">
+              找不到「{keyword.trim()}」。資料站需要精確的劇名，差一個字就會落空
+              （例：荒<span className="text-warn">唐</span>戀愛 → 荒
+              <span className="text-success">糖</span>戀愛）。
+              試試少打幾個字、改用其他譯名或原文名，再不行就手動建立。
+            </p>
+          )}
 
           {!searching && keyword.trim() && (
             <button

@@ -30,6 +30,12 @@ export interface BangumiResult {
   cover: string;
   /** 由 type + tags 推斷的類型，使用者可在新增時改掉 */
   category: string;
+  /** 劇情簡介，用來在新增時判斷要不要追；可能為空 */
+  summary: string;
+  /** 評分 0～10；0 代表沒人評過 */
+  score: number;
+  /** 評分人數。Bangumi 是 ACG 社群，非動畫作品常只有個位數，所以要連人數一起顯示 */
+  ratingCount: number;
 }
 
 interface RawSubject {
@@ -39,6 +45,8 @@ interface RawSubject {
   name_cn?: string;
   eps?: number;
   date?: string;
+  summary?: string;
+  rating?: { score?: number; total?: number };
   images?: { common?: string; medium?: string; grid?: string; large?: string };
   tags?: { name: string }[];
 }
@@ -106,9 +114,20 @@ export async function searchBangumi(keyword: string, signal?: AbortSignal): Prom
     }
   }
 
-  const ordered = [...data].sort(
-    (a, b) => (TYPE_PRIORITY[a.type] ?? 3) - (TYPE_PRIORITY[b.type] ?? 3)
-  );
+  // 名稱吻合度優先於類型：只看類型的話，搜韓劇會被不相干的動畫插隊
+  //（實例：搜「我的荒糖恋爱」，本篇被「我的老婆是只猫」「我的师父姜子牙」壓到第三）
+  const matchRank = (subject: RawSubject): number => {
+    const names = [subject.name_cn, subject.name].filter(Boolean) as string[];
+    if (names.some(n => n === simplified || n === trimmed)) return 0;
+    if (names.some(n => n.includes(simplified) || n.includes(trimmed))) return 1;
+    return 2;
+  };
+
+  const ordered = [...data].sort((a, b) => {
+    const byMatch = matchRank(a) - matchRank(b);
+    if (byMatch !== 0) return byMatch;
+    return (TYPE_PRIORITY[a.type] ?? 3) - (TYPE_PRIORITY[b.type] ?? 3);
+  });
 
   return ordered.map(subject => ({
     id: subject.id,
@@ -118,5 +137,9 @@ export async function searchBangumi(keyword: string, signal?: AbortSignal): Prom
     date: subject.date || '',
     cover: subject.images?.common || subject.images?.medium || subject.images?.grid || '',
     category: guessCategory(subject),
+    // 簡介是全形空白開頭的整段文字，去掉首尾空白才不會在卡片上留一塊空
+    summary: (subject.summary || '').trim(),
+    score: subject.rating?.score || 0,
+    ratingCount: subject.rating?.total || 0,
   }));
 }
