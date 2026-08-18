@@ -183,6 +183,20 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
                   </div>
                 </button>
 
+                {/* 新條目常常還沒人寫簡介（如剛上架的韓劇），退而顯示標籤，總比整塊空白好 */}
+                {!result.summary && result.tags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 px-2 pb-2">
+                    {result.tags.map(tag => (
+                      <span
+                        key={tag}
+                        className="rounded border border-line px-1.5 py-0.5 text-[10px] leading-none text-faint"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {/* 簡介另開一顆按鈕，避免想看劇情卻誤選了作品 */}
                 {result.summary && (
                   <button

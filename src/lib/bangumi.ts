@@ -30,8 +30,10 @@ export interface BangumiResult {
   cover: string;
   /** 由 type + tags 推斷的類型，使用者可在新增時改掉 */
   category: string;
-  /** 劇情簡介，用來在新增時判斷要不要追；可能為空 */
+  /** 劇情簡介，用來在新增時判斷要不要追；新條目常常還沒人寫，會是空字串 */
   summary: string;
+  /** 熱門標籤。沒有簡介時拿來當判斷依據（新劇通常標籤有、簡介沒有） */
+  tags: string[];
   /** 評分 0～10；0 代表沒人評過 */
   score: number;
   /** 評分人數。Bangumi 是 ACG 社群，非動畫作品常只有個位數，所以要連人數一起顯示 */
@@ -139,6 +141,7 @@ export async function searchBangumi(keyword: string, signal?: AbortSignal): Prom
     category: guessCategory(subject),
     // 簡介是全形空白開頭的整段文字，去掉首尾空白才不會在卡片上留一塊空
     summary: (subject.summary || '').trim(),
+    tags: (subject.tags || []).slice(0, 6).map(t => t.name),
     score: subject.rating?.score || 0,
     ratingCount: subject.rating?.total || 0,
   }));
