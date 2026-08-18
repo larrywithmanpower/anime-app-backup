@@ -236,13 +236,18 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
 
     const patch = {
       name: draft.name.trim(),
+      progress: draft.progress ?? item.progress,
       totalEpisodes: draft.totalEpisodes ?? '',
       status: draft.status ?? item.status,
       watchUrl: draft.watchUrl ?? '',
       category: draft.category ?? '',
+      coverImage: draft.coverImage ?? item.coverImage,
+      bangumiId: draft.bangumiId ?? item.bangumiId,
     };
 
     setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, ...patch } : i)));
+    // 進度可能在此被改寫，同步已存檔值，否則之後 blur 會誤判成沒變更
+    committedProgressRef.current.set(item.rowNumber, patch.progress);
     setItemToEdit(null);
 
     try {

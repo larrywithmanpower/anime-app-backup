@@ -99,7 +99,8 @@ const AnimeCard = React.memo(function AnimeCard({
               </span>
             </>
           ) : (
-            <span className="tnum text-[11px] text-faint">
+            // 文字進度（如「第二季 完」）給整行寬度，不擠在右側控制區裡被截斷
+            <span className={`text-[12px] ${isNumeric ? 'tnum text-faint' : 'break-words text-dim'}`}>
               {isNumeric ? `第 ${item.progress || 0} 集` : item.progress || '未設定'}
             </span>
           )}
@@ -136,19 +137,20 @@ const AnimeCard = React.memo(function AnimeCard({
               </button>
             )}
 
-            <input
-              type="text"
-              inputMode={isNumeric ? 'numeric' : 'text'}
-              pattern={isNumeric ? '[0-9]*' : undefined}
-              value={item.progress}
-              onChange={e => onInputChange(item, e.target.value)}
-              onBlur={() => onInputBlur(item)}
-              onKeyDown={e => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-              className={`tnum h-9 rounded-md border border-transparent bg-transparent text-center text-[15px] font-semibold text-text transition-colors focus:border-line-hi focus:bg-bg focus:outline-none ${
-                isNumeric ? 'w-11' : 'w-[84px] px-1 text-[13px]'
-              }`}
-              aria-label="目前進度"
-            />
+            {/* 文字進度已在上方整行顯示，這裡只給數字型的快速輸入框 */}
+            {isNumeric && (
+              <input
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={item.progress}
+                onChange={e => onInputChange(item, e.target.value)}
+                onBlur={() => onInputBlur(item)}
+                onKeyDown={e => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+                className="tnum h-9 w-11 rounded-md border border-transparent bg-transparent text-center text-[15px] font-semibold text-text transition-colors focus:border-line-hi focus:bg-bg focus:outline-none"
+                aria-label="目前進度"
+              />
+            )}
 
             {isNumeric && (
               <button

@@ -165,7 +165,9 @@ function updateMeta(ss, sheetName, row, data) {
   ensureSchema(sheet);
 
   var fields = [
+    {key: 'date', col: 1},
     {key: 'name', col: 2},
+    {key: 'progress', col: 3},
     {key: 'totalEpisodes', col: 4},
     {key: 'status', col: 5},
     {key: 'watchUrl', col: 6},
@@ -185,10 +187,15 @@ function updateMeta(ss, sheetName, row, data) {
 
   if (!touched) throw new Error("updateMeta 沒有帶任何可更新欄位");
 
+  // 有明確帶 date 就以它為準（資料整理時用來保住原本的最後觀看日期）
+  var explicitDate = data.date !== undefined && data.date !== null;
+
   // 只有改到「狀態」以外的內容才更新時間戳；切換狀態不該讓它跳到清單最前面
-  if (data.status === undefined || fields.some(function(f) {
-    return f.key !== 'status' && data[f.key] !== undefined && data[f.key] !== null;
-  })) {
+  var contentChanged = fields.some(function(f) {
+    return f.key !== 'status' && f.key !== 'date' && data[f.key] !== undefined && data[f.key] !== null;
+  });
+
+  if (!explicitDate && contentChanged) {
     sheet.getRange(rowIndex, 1).setValue(today());
   }
 
