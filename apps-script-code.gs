@@ -164,6 +164,9 @@ function updateMeta(ss, sheetName, row, data) {
 
   ensureSchema(sheet);
 
+  // 先記下舊進度，寫入後才能判斷「最後更新時間」該不該動
+  var previousProgress = String(sheet.getRange(rowIndex, 3).getValue());
+
   var fields = [
     {key: 'date', col: 1},
     {key: 'name', col: 2},
@@ -190,12 +193,12 @@ function updateMeta(ss, sheetName, row, data) {
   // 有明確帶 date 就以它為準（資料整理時用來保住原本的最後觀看日期）
   var explicitDate = data.date !== undefined && data.date !== null;
 
-  // 只有改到「狀態」以外的內容才更新時間戳；切換狀態不該讓它跳到清單最前面
-  var contentChanged = fields.some(function(f) {
-    return f.key !== 'status' && f.key !== 'date' && data[f.key] !== undefined && data[f.key] !== null;
-  });
+  // 「最後更新時間」代表最後看到哪一集，只有進度真的變了才動它。
+  // 改封面、改名稱、切狀態都只是整理資料，不該讓它跳到清單最前面。
+  var progressChanged = data.progress !== undefined && data.progress !== null
+    && String(data.progress) !== previousProgress;
 
-  if (!explicitDate && contentChanged) {
+  if (!explicitDate && progressChanged) {
     sheet.getRange(rowIndex, 1).setValue(today());
   }
 

@@ -76,10 +76,23 @@ const AnimeCard = React.memo(function AnimeCard({
             {item.name}
           </h3>
           {item.category && (
-            <span className="shrink-0 rounded border border-line px-1.5 py-0.5 text-[10px] leading-none text-faint">
+            <span className="shrink-0 self-center rounded border border-line px-1.5 py-0.5 text-[10px] leading-none text-faint">
               {item.category}
             </span>
           )}
+
+          {/* 放右上角，與右下角的 ＋ 拉開成對角線，避免加集數時誤觸 */}
+          <button
+            onClick={() => onEdit(item)}
+            className="-mr-1 -mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-line hover:text-text active:scale-90"
+            aria-label="編輯"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
+              <circle cx="12" cy="5" r="1.6" />
+              <circle cx="12" cy="12" r="1.6" />
+              <circle cx="12" cy="19" r="1.6" />
+            </svg>
+          </button>
         </div>
 
         {/* 進度條：沒填總集數就只顯示目前集數，不畫空條誤導 */}
@@ -164,18 +177,6 @@ const AnimeCard = React.memo(function AnimeCard({
                 </svg>
               </button>
             )}
-
-            <button
-              onClick={() => onEdit(item)}
-              className="flex h-9 w-8 items-center justify-center rounded-md text-faint transition-colors hover:bg-line hover:text-text active:scale-95"
-              aria-label="編輯"
-            >
-              <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
-                <circle cx="12" cy="5" r="1.6" />
-                <circle cx="12" cy="12" r="1.6" />
-                <circle cx="12" cy="19" r="1.6" />
-              </svg>
-            </button>
           </div>
         </div>
 

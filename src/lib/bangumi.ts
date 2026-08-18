@@ -7,6 +7,8 @@
  * 注意：API 要求帶 User-Agent，瀏覽器會自動帶自己的，不需要（也不能）手動設定。
  */
 
+import { toSimplified } from './t2s';
+
 const SEARCH_URL = 'https://api.bgm.tv/v0/search/subjects?limit=10';
 
 // 2=動畫 6=三次元（日劇/歐美劇/陸劇…） 1=書籍（漫畫/小說）
@@ -62,21 +64,47 @@ const guessCategory = (subject: RawSubject): string => {
   return '';
 };
 
-export async function searchBangumi(keyword: string, signal?: AbortSignal): Promise<BangumiResult[]> {
-  const trimmed = keyword.trim();
-  if (!trimmed) return [];
-
+async function fetchSearch(keyword: string, signal?: AbortSignal): Promise<RawSubject[]> {
   const res = await fetch(SEARCH_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ keyword: trimmed, filter: { type: SUBJECT_TYPES } }),
+    body: JSON.stringify({ keyword, filter: { type: SUBJECT_TYPES } }),
     signal,
   });
 
   if (!res.ok) throw new Error(`Bangumi 搜尋失敗（${res.status}）`);
 
   const json = await res.json();
-  const data: RawSubject[] = json?.data || [];
+  return json?.data || [];
+}
+
+export async function searchBangumi(keyword: string, signal?: AbortSignal): Promise<BangumiResult[]> {
+  const trimmed = keyword.trim();
+  if (!trimmed) return [];
+
+  // Bangumi 是簡體站，繁體關鍵字碰到鑽/钻、獨/独、靈/灵這類字形差異會完全搜不到，
+  // 因此繁簡兩種都送（並行，不增加等待時間），簡體結果排前面
+  const simplified = toSimplified(trimmed);
+  const queries = simplified === trimmed ? [trimmed] : [simplified, trimmed];
+
+  const settled = await Promise.allSettled(queries.map(q => fetchSearch(q, signal)));
+  const succeeded = settled.filter(s => s.status === 'fulfilled');
+
+  // 兩邊都失敗才算失敗（其中一邊掛掉不影響另一邊的結果）
+  if (!succeeded.length) {
+    const first = settled[0];
+    throw first.status === 'rejected' ? first.reason : new Error('Bangumi 搜尋失敗');
+  }
+
+  const seen = new Set<number>();
+  const data: RawSubject[] = [];
+  for (const s of succeeded) {
+    for (const subject of (s as PromiseFulfilledResult<RawSubject[]>).value) {
+      if (seen.has(subject.id)) continue;
+      seen.add(subject.id);
+      data.push(subject);
+    }
+  }
 
   const ordered = [...data].sort(
     (a, b) => (TYPE_PRIORITY[a.type] ?? 3) - (TYPE_PRIORITY[b.type] ?? 3)
