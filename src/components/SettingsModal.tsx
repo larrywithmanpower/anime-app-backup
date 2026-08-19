@@ -13,6 +13,26 @@ import { fetchCalendarEnabled, saveCalendarEnabled } from '@/lib/calendarSetting
  */
 const CALENDAR_OWNER = 'larry';
 
+/** 開關值的本機快取；只為了讓視窗一開就能按，真實值仍以 GAS 回傳為準 */
+const CALENDAR_CACHE_KEY = 'calendarEnabledCache';
+
+const readCachedCalendar = (): boolean | null => {
+  try {
+    const raw = localStorage.getItem(CALENDAR_CACHE_KEY);
+    return raw === 'true' ? true : raw === 'false' ? false : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeCachedCalendar = (value: boolean) => {
+  try {
+    localStorage.setItem(CALENDAR_CACHE_KEY, String(value));
+  } catch {
+    // 快取寫入失敗不影響主流程
+  }
+};
+
 interface SettingsModalProps {
   currentAccount: string;
   onLogout: () => void;
@@ -33,8 +53,8 @@ export default function SettingsModal({
 
   const canUseCalendar = currentAccount === CALENDAR_OWNER;
 
-  // null = 還沒讀到（設定存在 GAS，不是本機）
-  const [calendarOn, setCalendarOn] = useState<boolean | null>(null);
+  // null = 還沒讀到（設定存在 GAS，不是本機）；有快取就先用，視窗一開就能按
+  const [calendarOn, setCalendarOn] = useState<boolean | null>(readCachedCalendar);
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [calendarError, setCalendarError] = useState('');
 
@@ -44,7 +64,10 @@ export default function SettingsModal({
 
     let alive = true;
     fetchCalendarEnabled()
-      .then(value => alive && setCalendarOn(value))
+      .then(value => {
+        writeCachedCalendar(value);
+        if (alive) setCalendarOn(value);
+      })
       .catch(() => alive && setCalendarError('讀不到目前設定'));
     return () => {
       alive = false;
@@ -59,7 +82,9 @@ export default function SettingsModal({
     setCalendarError('');
     try {
       // 以後端回傳值為準：開啟會補寫提醒、關閉會清掉未來的提醒，都由後端執行
-      setCalendarOn(await saveCalendarEnabled(next));
+      const saved = await saveCalendarEnabled(next);
+      writeCachedCalendar(saved);
+      setCalendarOn(saved);
     } catch (err) {
       console.error(err);
       setCalendarError('切換失敗，請稍後再試');

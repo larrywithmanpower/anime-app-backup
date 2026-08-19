@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
@@ -14,6 +14,27 @@ export function useAccounts() {
   const [verifying, setVerifying] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
 
+  // 背景預抓的帳號列表；登入時直接拿它，不必當場再等一次 GAS
+  const accountListRef = useRef<Promise<unknown> | null>(null);
+
+  /**
+   * 預抓帳號列表。登入畫面一顯示就發，**不擋畫面**。
+   *
+   * GAS 容器閒置會被回收，第一支呼叫要付冷啟動（實測 5～36 秒，而且要 2～3 支才完全熱）。
+   * 這筆錢一定有人付，差別在誰付——讓它跟使用者打帳號名稱的時間重疊，按下登入時
+   * 通常已經回來了。失敗就把 ref 清掉，按登入時會自己重打
+   */
+  const prefetchAccountList = (): Promise<unknown> => {
+    if (!APPS_SCRIPT_URL) return Promise.reject(new Error('Apps Script URL is missing'));
+
+    const pending = fetch(`${APPS_SCRIPT_URL}?action=getSheets`).then(res => res.json());
+    accountListRef.current = pending;
+    pending.catch(() => {
+      if (accountListRef.current === pending) accountListRef.current = null;
+    });
+    return pending;
+  };
+
   const handleLogin = async () => {
     const name = loginName.trim();
     if (!name || !APPS_SCRIPT_URL) return;
@@ -22,15 +43,16 @@ export function useAccounts() {
     setLoginError('');
 
     try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?action=getSheets`);
-      const data = await res.json();
+      // 登入畫面一開就在背景抓了，這裡通常直接拿到結果；還沒發過或發失敗才當場打
+      const data = await (accountListRef.current || prefetchAccountList());
+      const failure = (data as { error?: string })?.error;
 
-      if (data.error) {
-        setLoginError('API 錯誤: ' + data.error);
+      if (failure) {
+        setLoginError('API 錯誤: ' + failure);
         return;
       }
 
-      const latestAccounts = Array.isArray(data) ? data : [];
+      const latestAccounts: string[] = Array.isArray(data) ? data : [];
 
       // 偵測是否回傳了原始數據列 (表示 GAS 版本過舊)
       if (latestAccounts.length > 0 && Array.isArray(latestAccounts[0])) {
@@ -65,6 +87,8 @@ export function useAccounts() {
     setCurrentAccount('');
     setIsLoggedIn(false);
     setLoginName('');
+    // 回到登入畫面就重抓一份：舊的可能是幾天前的，而且順便把 GAS 容器叫醒
+    prefetchAccountList().catch(() => {});
   };
 
   const handleCreateAccount = async () => {
@@ -110,6 +134,9 @@ export function useAccounts() {
     if (saved) {
       setCurrentAccount(saved);
       setIsLoggedIn(true);
+    } else {
+      // 擋不到畫面，純粹讓冷啟動提早開始跑
+      prefetchAccountList().catch(() => {});
     }
     setInitializing(false);
   }, []);
