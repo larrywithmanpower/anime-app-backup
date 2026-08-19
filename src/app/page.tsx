@@ -335,6 +335,7 @@ export default function AnimeTracker() {
           key={seasonDraft?.name || 'blank'}
           refreshing={refreshing}
           initial={seasonDraft}
+          existing={list}
           onAdd={handleAddItem}
           onClose={closeAddItem}
         />

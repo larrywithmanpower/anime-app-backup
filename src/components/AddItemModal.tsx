@@ -13,13 +13,18 @@ interface AddItemModalProps {
   refreshing: boolean;
   /** 預填草稿；有值就直接跳過搜尋，用於「加入新一季」這種已經知道要加什麼的入口 */
   initial?: ItemDraft | null;
+  /** 清單裡已經有的作品，用來擋重複加入 */
+  existing: { name: string; bangumiId: string }[];
   onAdd: (draft: ItemDraft) => Promise<boolean>;
   onClose: () => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 400;
 
-export default function AddItemModal({ refreshing, initial, onAdd, onClose }: AddItemModalProps) {
+/** 比名稱時忽略空白：「一念永恆 第三季」與「一念永恆第三季」視為同一部 */
+const normalizeName = (raw: string) => raw.replace(/\s+/g, '');
+
+export default function AddItemModal({ refreshing, initial, existing, onAdd, onClose }: AddItemModalProps) {
   const [step, setStep] = useState<'search' | 'form'>(initial ? 'form' : 'search');
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<BangumiResult[]>([]);
@@ -145,6 +150,11 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
 
   const urlHint = describeWatchUrl(watchUrl);
 
+  // 兩道防重複：搜尋結果比 Bangumi ID（最可靠，名稱可能被改過），表單比名稱（手動建立的沒有 ID）
+  const takenBangumiIds = new Set(existing.map(e => e.bangumiId).filter(Boolean));
+  const takenNames = new Set(existing.map(e => normalizeName(e.name)));
+  const duplicate = !!name.trim() && takenNames.has(normalizeName(name));
+
   if (step === 'search') {
     return (
       <Modal title="新增作品" onClose={onClose} wide>
@@ -171,14 +181,20 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
           )}
 
           {!searching &&
-            results.map(result => (
+            results.map(result => {
+              // 已經在清單裡的就不讓再選，否則會加出兩筆一模一樣的
+              const added = takenBangumiIds.has(String(result.id));
+              return (
               <div
                 key={result.id}
-                className="rounded-lg border border-line bg-bg transition-colors hover:border-accent"
+                className={`rounded-lg border bg-bg transition-colors ${
+                  added ? 'border-line opacity-50' : 'border-line hover:border-accent'
+                }`}
               >
                 <button
-                  onClick={() => pickResult(result)}
-                  className="flex w-full gap-2.5 p-2 text-left"
+                  onClick={() => !added && pickResult(result)}
+                  disabled={added}
+                  className="flex w-full gap-2.5 p-2 text-left disabled:cursor-not-allowed"
                 >
                   <div className="h-[58px] w-[42px] shrink-0 overflow-hidden rounded border border-line bg-surface">
                     {result.cover && (
@@ -197,6 +213,11 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
                       <p className="min-w-0 flex-1 truncate text-[13px] font-semibold text-text">
                         {result.nameCn || result.name}
                       </p>
+                      {added && (
+                        <span className="shrink-0 rounded border border-success/40 bg-success/10 px-1.5 py-0.5 text-[10px] leading-none text-success">
+                          已在清單
+                        </span>
+                      )}
                       {/* 人數一起顯示：Bangumi 非動畫作品常只有十幾人評分，藏起來反而會讓人誤信 */}
                       {result.score > 0 && (
                         <span className="tnum shrink-0 text-[11px] text-warn">
@@ -253,7 +274,8 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
                   </button>
                 )}
               </div>
-            ))}
+              );
+            })}
 
           {/* 搜不到時要講清楚為什麼，否則會被誤會成「這個站沒有韓劇」 */}
           {!searching && !searchError && keyword.trim() && results.length === 0 && (
@@ -293,10 +315,10 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
           </button>
           <button
             onClick={submit}
-            disabled={!name.trim() || refreshing}
+            disabled={!name.trim() || refreshing || duplicate}
             className="h-10 flex-1 rounded-lg bg-accent text-[14px] font-semibold text-white transition-colors hover:bg-accent-hi disabled:opacity-40"
           >
-            {refreshing ? '新增中…' : '加入清單'}
+            {duplicate ? '清單裡已經有了' : refreshing ? '新增中…' : '加入清單'}
           </button>
         </div>
       }
@@ -323,7 +345,13 @@ export default function AddItemModal({ refreshing, initial, onAdd, onClose }: Ad
             onChange={e => setName(e.target.value)}
             className={fieldClass}
           />
-          <p className="mt-1 text-[11px] text-faint">資料來源是簡體站，可以改成你習慣的寫法</p>
+          {duplicate ? (
+            <p className="mt-1 text-[11px] text-warn">
+              清單裡已經有「{name.trim()}」了，換個名稱或直接取消
+            </p>
+          ) : (
+            <p className="mt-1 text-[11px] text-faint">資料來源是簡體站，可以改成你習慣的寫法</p>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
