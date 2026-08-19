@@ -56,6 +56,12 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
    - 絕對集數取的是分集清單的位置，不是 `season`/`number`——使用者追動畫記的是「第 188 集」，TVmaze 標的卻是 S8E12。`src/lib/tvmaze.ts` 與 `apps-script-code.gs` 各有一份 `pickNextEpisode`，改動要兩邊同步
    - 平常開 App **不會**打 TVmaze，只在綁定時打；清單上的下一集是 GAS 寫進 Sheet 的
 
+5. **行事曆提醒是可關的加值功能，預設關閉**：開關值存在 GAS 的 Script Properties（`calendarEnabled`），不是 localStorage——真正在讀它的是跑在 Google 那邊的每日觸發器。
+   - 前端走 `src/lib/calendarSetting.ts`（`GET ?action=getSettings` / `POST {action:'updateSettings'}`）
+   - 關閉時 `clearFutureReminders()` 只刪「追番」日曆上、說明欄以 `EVENT_MARKER` 開頭、且今天之後的事件，手動加的行程動不到
+   - 開啟時 `writeRemindersFromSheet()` 直接讀 Sheet 既有的 K / L 欄補寫，不打 TVmaze
+   - `refreshSchedule()` 無論開關都會更新 K / L，只有寫日曆那段受開關控制——卡片上的更新日期不該因為關掉提醒而消失
+
 ### 前端結構
 
 - `src/app/page.tsx`：唯一頁面，純 orchestration 層，把兩個 hook 的狀態與元件串起來
@@ -63,6 +69,8 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
 - `src/hooks/useAnimeList.ts`：清單的全部狀態（清單、modal 開關、搜尋、排序、狀態篩選、樂觀更新、toast）
 - `src/lib/bangumi.ts`：Bangumi 搜尋封裝
 - `src/lib/tvmaze.ts`：TVmaze 搜尋與「下一集」計算
+- `src/lib/gas.ts`：GAS webhook 的共用 GET / POST。`/exec` 端點會間歇性回 404（實測約 8 次 1 次，掛的是轉址到 `script.googleusercontent.com` 那段），所以 GET 一律重試一次；POST **不重試**（重送有機會寫入兩次），改由呼叫端自行決定要 refetch 還是回頭讀狀態
+- `src/lib/calendarSetting.ts`：行事曆開關的讀寫
 - `src/lib/watchUrl.ts`：gimy 網址解析與重組（網域存 `localStorage.gimyDomain`）
 - `src/components/ScheduleBinder.tsx`：TVmaze 綁定 UI，新增與編輯兩個 modal 共用
 - `src/components/Modal.tsx`：所有彈窗的共用外殼（遮罩、Esc 關閉、`fieldClass` / `labelClass` 表單樣式）
