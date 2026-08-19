@@ -96,6 +96,28 @@ const parseAirdate = (raw: unknown): string => {
 const todayLabel = () =>
   new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
+/**
+ * 新增用的草稿 → 清單項目。
+ *
+ * 欄位對照要跟 mapRows 一致，也要跟 GAS 的 addNewItem 寫進去的值一致；
+ * 有一邊對不上，畫面就會跟 Sheet 說不同的話，直到下次重抓才被蓋掉。
+ */
+const draftToItem = (draft: ItemDraft, rowNumber: number): AnimeItem => ({
+  rowNumber,
+  date: todayLabel(),
+  name: draft.name.trim(),
+  progress: draft.progress ?? '0',
+  totalEpisodes: parseTotalEpisodes(draft.totalEpisodes),
+  status: draft.status ?? 'watching',
+  watchUrl: draft.watchUrl ?? '',
+  coverImage: draft.coverImage ?? '',
+  bangumiId: draft.bangumiId ?? '',
+  category: draft.category ?? '',
+  tvmazeId: draft.tvmazeId ?? '',
+  nextEpisodeDate: draft.nextEpisodeDate ?? '',
+  nextEpisodeLabel: draft.nextEpisodeLabel ?? '',
+});
+
 export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const [list, setList] = useState<AnimeItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -192,7 +214,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     }
   };
 
-  const postAction = (body: Record<string, unknown>) => gasPost(body);
+  const postAction = <T = unknown,>(body: Record<string, unknown>) => gasPost<T>(body);
 
   const handleManualRefresh = () => {
     fetchData();
@@ -202,7 +224,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     if (!draft.name.trim() || !APPS_SCRIPT_URL) return false;
     setRefreshing(true);
     try {
-      await postAction({
+      const result = await postAction<{ rowNumber?: number }>({
         action: 'addItem',
         sheet: currentAccount,
         name: draft.name.trim(),
@@ -218,8 +240,16 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         nextEpisodeLabel: draft.nextEpisodeLabel ?? '',
       });
       setShowAddItem(false);
-      // 需要拿到 Sheet 實際列號才能後續更新，因此新增後重抓
-      await fetchData();
+
+      // 後續更新要有 Sheet 的實際列號，而 addItem 已經把它回傳了，
+      // 所以不必再打一趟 GET 重抓整份清單——那趟會讓每次新增都付兩次 GAS 往返，
+      // 而一趟本來就要十幾秒。拿不到列號才退回重抓（舊版部署的相容路徑）
+      if (typeof result?.rowNumber === 'number') {
+        applyList([...list, draftToItem(draft, result.rowNumber)], currentAccount);
+      } else {
+        await fetchData();
+      }
+
       pushToast(`已加入「${draft.name.trim()}」`, 'success');
       return true;
     } catch (err) {
