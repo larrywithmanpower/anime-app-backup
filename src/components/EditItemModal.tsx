@@ -5,6 +5,7 @@ import Modal, { fieldClass, labelClass } from './Modal';
 import { AnimeItem, CATEGORIES, WATCH_STATUSES, WatchStatus } from '@/types/anime';
 import { describeWatchUrl } from '@/lib/watchUrl';
 import { searchBangumi, BangumiResult } from '@/lib/bangumi';
+import ScheduleBinder, { ScheduleBinding } from './ScheduleBinder';
 import type { ItemDraft } from '@/hooks/useAnimeList';
 
 interface EditItemModalProps {
@@ -23,6 +24,11 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
   const [watchUrl, setWatchUrl] = useState(item.watchUrl);
   const [coverImage, setCoverImage] = useState(item.coverImage);
   const [bangumiId, setBangumiId] = useState(item.bangumiId);
+  const [schedule, setSchedule] = useState<ScheduleBinding>({
+    tvmazeId: item.tvmazeId,
+    nextEpisodeDate: item.nextEpisodeDate,
+    nextEpisodeLabel: item.nextEpisodeLabel,
+  });
   const [saving, setSaving] = useState(false);
 
   const [candidates, setCandidates] = useState<BangumiResult[] | null>(null);
@@ -58,6 +64,7 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
       category,
       coverImage,
       bangumiId,
+      ...schedule,
     });
     setSaving(false);
   };
@@ -270,6 +277,8 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
             </p>
           )}
         </div>
+
+        <ScheduleBinder name={name} value={schedule} onChange={setSchedule} />
       </div>
     </Modal>
   );

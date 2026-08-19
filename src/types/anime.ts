@@ -23,6 +23,12 @@ export interface AnimeItem {
   coverImage: string;
   bangumiId: string;
   category: string;
+  /** TVmaze 作品 ID；有綁定才會有播出排程 */
+  tvmazeId: string;
+  /** 下一集播出日 YYYY-MM-DD；由 GAS 每日掃描寫入，前端只讀 */
+  nextEpisodeDate: string;
+  /** 下一集顯示文字，例如「第 188 集（S8E12）」 */
+  nextEpisodeLabel: string;
 }
 
 /** Sheet E 欄可能殘留舊 AI 功能的 TRUE/FALSE，一律回退為在追 */

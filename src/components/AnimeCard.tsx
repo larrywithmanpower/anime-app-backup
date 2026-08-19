@@ -21,6 +21,21 @@ const formatDate = (raw: string) => {
   return `${String(source.getMonth() + 1).padStart(2, '0')}.${String(source.getDate()).padStart(2, '0')}`;
 };
 
+/**
+ * 下一集提示文字；已經過期的排程回 null。
+ *
+ * 過期代表 GAS 的每日掃描還沒跑到（或這部已完結），此時寫「9/1 更新」會是假訊息，寧可不顯示。
+ */
+const describeNextEpisode = (airdate: string): string | null => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(airdate)) return null;
+
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+  if (airdate < today) return null;
+  if (airdate === today) return '今天更新';
+
+  return `${airdate.slice(5).replace('-', '.')} 更新`;
+};
+
 const AnimeCard = React.memo(function AnimeCard({
   item,
   onIncrement,
@@ -43,6 +58,11 @@ const AnimeCard = React.memo(function AnimeCard({
 
   const watchTarget = resolveWatchUrl(item.watchUrl, item.progress);
   const showCover = item.coverImage && !coverFailed;
+  // 完結與棄追的作品不需要更新提示
+  const nextEpisode =
+    item.status === 'watching' || item.status === 'plan'
+      ? describeNextEpisode(item.nextEpisodeDate)
+      : null;
 
   return (
     <div className="fade-up group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-hi hover:bg-surface-hi">
@@ -133,6 +153,15 @@ const AnimeCard = React.memo(function AnimeCard({
 
         <div className="flex items-center gap-1.5">
           <span className="tnum shrink-0 text-[11px] text-faint">{formatDate(item.date)}</span>
+
+          {nextEpisode && (
+            <span
+              title={item.nextEpisodeLabel ? `下一集：${item.nextEpisodeLabel}` : undefined}
+              className="tnum shrink-0 rounded border border-accent/30 bg-accent-soft px-1.5 py-0.5 text-[10px] leading-none text-accent-hi"
+            >
+              {nextEpisode}
+            </span>
+          )}
 
           {watchTarget && (
             <a

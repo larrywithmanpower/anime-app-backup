@@ -11,7 +11,7 @@ const withSerwist = withSerwistInit({
   // 但 scope 不會自動套，必須手動帶——SW 放在子路徑下無法宣告根目錄 scope，上線會註冊失敗
   swUrl: '/sw.js',
   scope: `${basePath}/`,
-  // 開發時關掉，避免 SW 快取擋住熱更新（dev 才能繼續用 Turbopack）
+  // 開發時關掉，避免 SW 快取擋住熱更新
   disable: !isProd,
   reloadOnOnline: true,
 });
@@ -27,4 +27,7 @@ const nextConfig = {
   },
 };
 
-export default withSerwist(nextConfig);
+// dev 一定要走沒包過的設定：即使 Serwist 被 disable，withSerwistInit 仍會塞一份 webpack config 進去，
+// 而 Next 16 的 Turbopack 只要偵測到 webpack config 又沒有 turbopack config 就直接拒絕啟動。
+// 正式建置則帶 --webpack（Serwist 的 plugin mode 不支援 Turbopack）
+export default isProd ? withSerwist(nextConfig) : nextConfig;

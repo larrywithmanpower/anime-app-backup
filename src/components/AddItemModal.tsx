@@ -5,6 +5,7 @@ import Modal, { fieldClass, labelClass } from './Modal';
 import { CATEGORIES, WATCH_STATUSES, WatchStatus } from '@/types/anime';
 import { searchBangumi, BangumiResult } from '@/lib/bangumi';
 import { describeWatchUrl } from '@/lib/watchUrl';
+import ScheduleBinder, { ScheduleBinding } from './ScheduleBinder';
 import type { ItemDraft } from '@/hooks/useAnimeList';
 
 interface AddItemModalProps {
@@ -31,6 +32,11 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
   const [watchUrl, setWatchUrl] = useState('');
   const [coverImage, setCoverImage] = useState('');
   const [bangumiId, setBangumiId] = useState('');
+  const [schedule, setSchedule] = useState<ScheduleBinding>({
+    tvmazeId: '',
+    nextEpisodeDate: '',
+    nextEpisodeLabel: '',
+  });
 
   const abortRef = useRef<AbortController | null>(null);
 
@@ -80,6 +86,8 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
     setCategory(result.category);
     setCoverImage(result.cover);
     setBangumiId(String(result.id));
+    // 換一部作品就不能沿用上一部的排程綁定
+    setSchedule({ tvmazeId: '', nextEpisodeDate: '', nextEpisodeLabel: '' });
     setStep('form');
   };
 
@@ -89,6 +97,7 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
     setCategory('');
     setCoverImage('');
     setBangumiId('');
+    setSchedule({ tvmazeId: '', nextEpisodeDate: '', nextEpisodeLabel: '' });
     setStep('form');
   };
 
@@ -103,6 +112,7 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
       coverImage,
       bangumiId,
       category,
+      ...schedule,
     });
   };
 
@@ -367,6 +377,8 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
             </p>
           )}
         </div>
+
+        <ScheduleBinder name={name} value={schedule} onChange={setSchedule} />
       </div>
     </Modal>
   );

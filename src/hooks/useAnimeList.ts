@@ -32,6 +32,9 @@ export interface ItemDraft {
   coverImage?: string;
   bangumiId?: string;
   category?: string;
+  tvmazeId?: string;
+  nextEpisodeDate?: string;
+  nextEpisodeLabel?: string;
 }
 
 // 將日期字串轉成毫秒；無效或空值回傳 0（排到最後）
@@ -66,8 +69,29 @@ const mapRows = (rows: unknown[][]): AnimeItem[] =>
       coverImage: String(row[6] ?? ''),
       bangumiId: String(row[7] ?? ''),
       category: String(row[8] ?? ''),
+      tvmazeId: String(row[9] ?? ''),
+      nextEpisodeDate: parseAirdate(row[10]),
+      nextEpisodeLabel: String(row[11] ?? ''),
     }))
     .filter(item => item.name);
+
+/**
+ * 播出日一律正規化成 YYYY-MM-DD。
+ *
+ * K 欄已設成純文字，正常會直接拿到 `2026-08-22`；但舊資料或手動改過的格子可能被
+ * Sheets 認成日期，JSON 化後是 UTC 的 ISO 字串（`2026-08-21T16:00:00.000Z`），
+ * 直接截前 10 碼會整整差一天，必須換回台北時區。
+ */
+const parseAirdate = (raw: unknown): string => {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime())
+    ? ''
+    : parsed.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+};
 
 const todayLabel = () =>
   new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
@@ -198,6 +222,9 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         coverImage: draft.coverImage ?? '',
         bangumiId: draft.bangumiId ?? '',
         category: draft.category ?? '',
+        tvmazeId: draft.tvmazeId ?? '',
+        nextEpisodeDate: draft.nextEpisodeDate ?? '',
+        nextEpisodeLabel: draft.nextEpisodeLabel ?? '',
       });
       setShowAddItem(false);
       // 需要拿到 Sheet 實際列號才能後續更新，因此新增後重抓
@@ -243,6 +270,11 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
       category: draft.category ?? '',
       coverImage: draft.coverImage ?? item.coverImage,
       bangumiId: draft.bangumiId ?? item.bangumiId,
+      // 排程三欄由編輯視窗整組給或整組不給，沒帶就沿用原值，
+      // 免得單純改個名字就把 GAS 掃到的下一集清掉
+      tvmazeId: draft.tvmazeId ?? item.tvmazeId,
+      nextEpisodeDate: draft.nextEpisodeDate ?? item.nextEpisodeDate,
+      nextEpisodeLabel: draft.nextEpisodeLabel ?? item.nextEpisodeLabel,
     };
 
     setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, ...patch } : i)));
