@@ -378,7 +378,12 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
           )}
         </div>
 
-        <ScheduleBinder name={name} value={schedule} onChange={setSchedule} />
+        <ScheduleBinder
+          name={name}
+          value={schedule}
+          onChange={setSchedule}
+          onTotalEpisodes={setTotalEpisodes}
+        />
       </div>
     </Modal>
   );

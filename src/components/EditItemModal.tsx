@@ -278,7 +278,12 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
           )}
         </div>
 
-        <ScheduleBinder name={name} value={schedule} onChange={setSchedule} />
+        <ScheduleBinder
+          name={name}
+          value={schedule}
+          onChange={setSchedule}
+          onTotalEpisodes={setTotalEpisodes}
+        />
       </div>
     </Modal>
   );

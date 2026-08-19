@@ -417,14 +417,52 @@ function pickNextEpisode(episodes, today) {
   return null;
 }
 
-function fetchNextEpisode(tvmazeId, today) {
+var CN_DIGITS = '零一二三四五六七八九';
+
+/** 從作品名稱讀出使用者追的是第幾季，讀不到回 0 */
+function parseSeasonFromName(name) {
+  var match = name.match(/第\s*([0-9]+|[一二三四五六七八九十]+)\s*季/);
+  if (!match) return 0;
+
+  var raw = match[1];
+  if (/^[0-9]+$/.test(raw)) return Number(raw);
+
+  if (raw === '十') return 10;
+  if (raw.length === 2 && raw.charAt(0) === '十') return 10 + CN_DIGITS.indexOf(raw.charAt(1));
+  if (raw.length === 2 && raw.charAt(1) === '十') return CN_DIGITS.indexOf(raw.charAt(0)) * 10;
+  if (raw.length === 3 && raw.charAt(1) === '十') {
+    return CN_DIGITS.indexOf(raw.charAt(0)) * 10 + CN_DIGITS.indexOf(raw.charAt(2));
+  }
+  return CN_DIGITS.indexOf(raw);
+}
+
+/**
+ * 依作品名稱決定總集數。
+ * 名稱有寫季別（「鑽石王牌 第四季」）就只算那一季——使用者的進度是從該季第 1 集起算，
+ * 拿全系列 191 集去比會變成 1/191。沒寫季別就用全系列集數，與卡片上的絕對集數同基準。
+ * 季別在 TVmaze 對不上（完美世界是 S2021…S2026 這種年份季）時退回全系列，不硬猜。
+ * 這段邏輯與前端 src/lib/tvmaze.ts 的 countEpisodes 必須一致。
+ */
+function countEpisodes(name, episodes) {
+  var season = parseSeasonFromName(name);
+  if (season > 0) {
+    var inSeason = 0;
+    for (var i = 0; i < episodes.length; i++) {
+      if (episodes[i].season === season) inSeason++;
+    }
+    if (inSeason > 0) return inSeason;
+  }
+  return episodes.length;
+}
+
+function fetchShowSchedule(tvmazeId, name, today) {
   var url = 'https://api.tvmaze.com/shows/' + encodeURIComponent(tvmazeId) + '?embed=episodes';
   var res = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
   if (res.getResponseCode() !== 200) return null;
 
   var json = JSON.parse(res.getContentText());
   var episodes = (json && json._embedded && json._embedded.episodes) || [];
-  return pickNextEpisode(episodes, today);
+  return {next: pickNextEpisode(episodes, today), totalEpisodes: countEpisodes(name, episodes)};
 }
 
 /**
@@ -466,18 +504,26 @@ function refreshSchedule() {
       if (checked > 0) Utilities.sleep(600);
       checked++;
 
-      var next = null;
+      var schedule = null;
       try {
-        next = fetchNextEpisode(tvmazeId, today);
+        schedule = fetchShowSchedule(tvmazeId, name, today);
       } catch (err) {
         // 單一作品查詢失敗不該中斷整批；保留舊值等明天再試
         console.error(name + ' 排程查詢失敗: ' + err);
         continue;
       }
+      if (!schedule) continue;
 
+      var next = schedule.next;
       var rowIndex = r + 2;
       sheet.getRange(rowIndex, 11).setValue(next ? next.date : '');
       sheet.getRange(rowIndex, 12).setValue(next ? next.label : '');
+
+      // 連載中的作品集數會一路往上加，所以每天覆蓋而不是只補空白。
+      // 代價是綁了 TVmaze 的作品，手動改的總集數隔天會被蓋回去
+      if (schedule.totalEpisodes > 0) {
+        sheet.getRange(rowIndex, 4).setValue(schedule.totalEpisodes);
+      }
 
       if (calendar && next && next.date <= horizon) {
         upsertReminder(calendar, name, next);

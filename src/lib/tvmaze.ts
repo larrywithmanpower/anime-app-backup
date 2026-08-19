@@ -126,15 +126,62 @@ export function pickNextEpisode(episodes: RawEpisode[], today = todayInTaipei())
   };
 }
 
-/** 取得指定作品的下一集；全部播完（或無排程）回傳 null */
-export async function fetchNextEpisode(
+const CN_DIGITS = '零一二三四五六七八九';
+
+/**
+ * 從作品名稱裡讀出使用者追的是第幾季，讀不到回 0。
+ * 只認「第X季」——這是清單裡實際的寫法（鑽石王牌 第四季、修羅武神 第二季）。
+ */
+export function parseSeasonFromName(name: string): number {
+  const match = name.match(/第\s*([0-9]+|[一二三四五六七八九十]+)\s*季/);
+  if (!match) return 0;
+
+  const raw = match[1];
+  if (/^[0-9]+$/.test(raw)) return Number(raw);
+
+  // 十 / 十二 / 二十…，追番用不到更大的數
+  if (raw === '十') return 10;
+  if (raw.length === 2 && raw[0] === '十') return 10 + CN_DIGITS.indexOf(raw[1]);
+  if (raw.length === 2 && raw[1] === '十') return CN_DIGITS.indexOf(raw[0]) * 10;
+  if (raw.length === 3 && raw[1] === '十') return CN_DIGITS.indexOf(raw[0]) * 10 + CN_DIGITS.indexOf(raw[2]);
+  return CN_DIGITS.indexOf(raw);
+}
+
+/**
+ * 依作品名稱決定總集數。
+ *
+ * 名稱有寫季別（「鑽石王牌 第四季」）就只算那一季——使用者的進度是從該季第 1 集起算的，
+ * 拿全系列 191 集去比會變成 1/191。名稱沒寫季別就用全系列集數，與卡片上的絕對集數同基準。
+ * 季別在 TVmaze 對不上（例如完美世界是 S2021…S2026 這種年份季）時退回全系列，不硬猜。
+ *
+ * 這段邏輯與 apps-script-code.gs 的 countEpisodes 必須一致。
+ */
+export function countEpisodes(name: string, episodes: RawEpisode[]): number {
+  const season = parseSeasonFromName(name);
+  if (season > 0) {
+    const inSeason = episodes.filter(ep => ep.season === season).length;
+    if (inSeason > 0) return inSeason;
+  }
+  return episodes.length;
+}
+
+export interface ShowSchedule {
+  next: NextEpisode | null;
+  /** 依名稱判定的總集數；0 代表查不到 */
+  totalEpisodes: number;
+}
+
+/** 取得指定作品的下一集與總集數；全部播完（或無排程）時 next 為 null */
+export async function fetchShowSchedule(
   showId: string | number,
+  name: string,
   signal?: AbortSignal
-): Promise<NextEpisode | null> {
+): Promise<ShowSchedule> {
   // 用 embed 一次拿回作品與分集，省一趟往返；絕對集數需要完整清單，不能用 embed=nextepisode
   const res = await fetch(`${BASE}/shows/${showId}?embed=episodes`, { signal });
   if (!res.ok) throw new Error(`TVmaze 取得分集失敗（${res.status}）`);
 
   const json = await res.json();
-  return pickNextEpisode(json?._embedded?.episodes || []);
+  const episodes: RawEpisode[] = json?._embedded?.episodes || [];
+  return { next: pickNextEpisode(episodes), totalEpisodes: countEpisodes(name, episodes) };
 }

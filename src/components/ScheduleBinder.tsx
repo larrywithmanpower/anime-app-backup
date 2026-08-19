@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { labelClass } from './Modal';
-import { searchTvmaze, fetchNextEpisode, tvmazeShowUrl, TvmazeResult } from '@/lib/tvmaze';
+import { searchTvmaze, fetchShowSchedule, tvmazeShowUrl, TvmazeResult } from '@/lib/tvmaze';
 
 export interface ScheduleBinding {
   tvmazeId: string;
@@ -11,10 +11,12 @@ export interface ScheduleBinding {
 }
 
 interface ScheduleBinderProps {
-  /** 拿來當搜尋關鍵字的作品名稱 */
+  /** 拿來當搜尋關鍵字的作品名稱，同時決定總集數要算整部還是只算指定的那一季 */
   name: string;
   value: ScheduleBinding;
   onChange: (next: ScheduleBinding) => void;
+  /** 綁定成功時回填總集數，讓使用者存檔前還能改 */
+  onTotalEpisodes: (total: string) => void;
 }
 
 const EMPTY: ScheduleBinding = { tvmazeId: '', nextEpisodeDate: '', nextEpisodeLabel: '' };
@@ -27,7 +29,7 @@ const formatDate = (raw: string) => raw.replace(/-/g, '.').slice(5);
  * 刻意不做自動配對：華語作品的命中率大約只有一半，且同名不同季很容易配錯，
  * 錯了會每天推錯的更新提醒，比沒有提醒更糟。沿用封面那套「列候選讓人選」。
  */
-export default function ScheduleBinder({ name, value, onChange }: ScheduleBinderProps) {
+export default function ScheduleBinder({ name, value, onChange, onTotalEpisodes }: ScheduleBinderProps) {
   const [candidates, setCandidates] = useState<TvmazeResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [binding, setBinding] = useState<number | null>(null);
@@ -53,12 +55,13 @@ export default function ScheduleBinder({ name, value, onChange }: ScheduleBinder
     setBinding(show.id);
     setError('');
     try {
-      const next = await fetchNextEpisode(show.id);
+      const { next, totalEpisodes } = await fetchShowSchedule(show.id, name);
       onChange({
         tvmazeId: String(show.id),
         nextEpisodeDate: next?.date || '',
         nextEpisodeLabel: next?.label || '',
       });
+      if (totalEpisodes > 0) onTotalEpisodes(String(totalEpisodes));
       setCandidates(null);
       // 綁定成功但查無未來集數時要講清楚，否則會被當成綁定失敗
       if (!next) setError('已綁定，但這部目前沒有排定的下一集');
