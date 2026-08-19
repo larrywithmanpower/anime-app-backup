@@ -18,6 +18,11 @@ const HEDGE_AFTER_MS = 3000;
 const MAX_ATTEMPTS = 3;
 /** 冪等寫入重送前的間隔；寫入不能對衝，只能等失敗才重試 */
 const POST_RETRY_DELAY_MS = 800;
+/**
+ * 單發讀取的上限。沒有上限的話請求卡住就永遠 pending，同步圖示會無限轉下去，
+ * 而畫面上其實已經有快取資料可看——與其一直轉，不如放棄並說「顯示的是上次同步的內容」
+ */
+const GET_TIMEOUT_MS = 30000;
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -34,7 +39,7 @@ export async function gasGet<T>(params: Record<string, string>, isValid: (json: 
   let fallback: unknown;
 
   const attempt = async (): Promise<T> => {
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(GET_TIMEOUT_MS) });
     const json = await res.json();
     if (fallback === undefined) fallback = json;
     if (!isValid(json)) throw new Error('回應格式不正確');
