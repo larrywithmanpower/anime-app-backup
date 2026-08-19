@@ -55,13 +55,13 @@ export default function ScheduleBinder({ name, value, onChange, onTotalEpisodes 
     setBinding(show.id);
     setError('');
     try {
-      const { next, totalEpisodes } = await fetchShowSchedule(show.id, name);
+      const { next, airedEpisodes } = await fetchShowSchedule(show.id, name);
       onChange({
         tvmazeId: String(show.id),
         nextEpisodeDate: next?.date || '',
         nextEpisodeLabel: next?.label || '',
       });
-      if (totalEpisodes > 0) onTotalEpisodes(String(totalEpisodes));
+      if (airedEpisodes > 0) onTotalEpisodes(String(airedEpisodes));
       setCandidates(null);
       // 綁定成功但查無未來集數時要講清楚，否則會被當成綁定失敗
       if (!next) setError('已綁定，但這部目前沒有排定的下一集');

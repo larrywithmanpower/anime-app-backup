@@ -148,30 +148,37 @@ export function parseSeasonFromName(name: string): number {
 }
 
 /**
- * 依作品名稱決定總集數。
+ * 算出「目前為止已經播出幾集」，也就是最新集數。
+ *
+ * 刻意不用分集清單的長度：TVmaze 連已公布但還沒播的都收進去，
+ * 拿那個當分母會憑空多出幾集（史萊姆這週才第 91 集，清單卻已經排到 96）。
+ * 進度條要回答的是「我離最新一集還差幾集」，所以只數播出日在今天以前的。
  *
  * 名稱有寫季別（「鑽石王牌 第四季」）就只算那一季——使用者的進度是從該季第 1 集起算的，
- * 拿全系列 191 集去比會變成 1/191。名稱沒寫季別就用全系列集數，與卡片上的絕對集數同基準。
- * 季別在 TVmaze 對不上（例如完美世界是 S2021…S2026 這種年份季）時退回全系列，不硬猜。
+ * 拿全系列 191 集去比會變成 1/191。季別在 TVmaze 對不上（完美世界是 S2021…S2026
+ * 這種年份季）時退回整部，不硬猜。
  *
- * 這段邏輯與 apps-script-code.gs 的 countEpisodes 必須一致。
+ * 這段邏輯與 apps-script-code.gs 的 countAiredEpisodes 必須一致。
  */
-export function countEpisodes(name: string, episodes: RawEpisode[]): number {
+export function countAiredEpisodes(
+  name: string,
+  episodes: RawEpisode[],
+  today = todayInTaipei()
+): number {
   const season = parseSeasonFromName(name);
-  if (season > 0) {
-    const inSeason = episodes.filter(ep => ep.season === season).length;
-    if (inSeason > 0) return inSeason;
-  }
-  return episodes.length;
+  const inSeason = season > 0 ? episodes.filter(ep => ep.season === season) : [];
+  const pool = inSeason.length > 0 ? inSeason : episodes;
+
+  return pool.filter(ep => ep.airdate && ep.airdate <= today).length;
 }
 
 export interface ShowSchedule {
   next: NextEpisode | null;
-  /** 依名稱判定的總集數；0 代表查不到 */
-  totalEpisodes: number;
+  /** 到今天為止已播出的集數；0 代表查不到 */
+  airedEpisodes: number;
 }
 
-/** 取得指定作品的下一集與總集數；全部播完（或無排程）時 next 為 null */
+/** 取得指定作品的下一集與最新集數；全部播完（或無排程）時 next 為 null */
 export async function fetchShowSchedule(
   showId: string | number,
   name: string,
@@ -183,5 +190,5 @@ export async function fetchShowSchedule(
 
   const json = await res.json();
   const episodes: RawEpisode[] = json?._embedded?.episodes || [];
-  return { next: pickNextEpisode(episodes), totalEpisodes: countEpisodes(name, episodes) };
+  return { next: pickNextEpisode(episodes), airedEpisodes: countAiredEpisodes(name, episodes) };
 }

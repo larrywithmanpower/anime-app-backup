@@ -66,8 +66,9 @@ const AnimeCard = React.memo(function AnimeCard({
 
   return (
     <div className="fade-up group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-hi hover:bg-surface-hi">
-      {/* 封面：Bangumi 沒圖或載入失敗時退成首字，維持版面對齊 */}
-      <div className="h-[74px] w-[52px] shrink-0 overflow-hidden rounded-md border border-line bg-bg">
+      {/* 封面：Bangumi 沒圖或載入失敗時退成首字，維持版面對齊。
+          高度跟著右側內容撐滿——加了進度條那一行之後，固定高會在封面下方留一塊空白 */}
+      <div className="min-h-[80px] w-[60px] shrink-0 self-stretch overflow-hidden rounded-md border border-line bg-bg">
         {showCover ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img

@@ -437,22 +437,31 @@ function parseSeasonFromName(name) {
 }
 
 /**
- * 依作品名稱決定總集數。
+ * 算出「目前為止已經播出幾集」，也就是最新集數。
+ * 刻意不用分集清單的長度：TVmaze 連已公布但還沒播的都收進去，拿那個當分母會憑空多出幾集
+ * （史萊姆這週才第 91 集，清單卻已經排到 96）。進度條要回答的是「我離最新一集還差幾集」。
  * 名稱有寫季別（「鑽石王牌 第四季」）就只算那一季——使用者的進度是從該季第 1 集起算，
- * 拿全系列 191 集去比會變成 1/191。沒寫季別就用全系列集數，與卡片上的絕對集數同基準。
- * 季別在 TVmaze 對不上（完美世界是 S2021…S2026 這種年份季）時退回全系列，不硬猜。
- * 這段邏輯與前端 src/lib/tvmaze.ts 的 countEpisodes 必須一致。
+ * 拿全系列 191 集去比會變成 1/191。季別在 TVmaze 對不上（完美世界是 S2021…S2026
+ * 這種年份季）時退回整部，不硬猜。
+ * 這段邏輯與前端 src/lib/tvmaze.ts 的 countAiredEpisodes 必須一致。
  */
-function countEpisodes(name, episodes) {
+function countAiredEpisodes(name, episodes, today) {
   var season = parseSeasonFromName(name);
+
+  var pool = [];
   if (season > 0) {
-    var inSeason = 0;
     for (var i = 0; i < episodes.length; i++) {
-      if (episodes[i].season === season) inSeason++;
+      if (episodes[i].season === season) pool.push(episodes[i]);
     }
-    if (inSeason > 0) return inSeason;
   }
-  return episodes.length;
+  if (!pool.length) pool = episodes;
+
+  var aired = 0;
+  for (var j = 0; j < pool.length; j++) {
+    var airdate = pool[j].airdate || '';
+    if (airdate && airdate <= today) aired++;
+  }
+  return aired;
 }
 
 function fetchShowSchedule(tvmazeId, name, today) {
@@ -462,7 +471,10 @@ function fetchShowSchedule(tvmazeId, name, today) {
 
   var json = JSON.parse(res.getContentText());
   var episodes = (json && json._embedded && json._embedded.episodes) || [];
-  return {next: pickNextEpisode(episodes, today), totalEpisodes: countEpisodes(name, episodes)};
+  return {
+    next: pickNextEpisode(episodes, today),
+    airedEpisodes: countAiredEpisodes(name, episodes, today)
+  };
 }
 
 /**
