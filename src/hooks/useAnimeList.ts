@@ -11,8 +11,13 @@ import {
 
 import { APPS_SCRIPT_URL, gasGet, gasPost } from '@/lib/gas';
 
-/** +/- 連按時的合併視窗；一列只會送出最後一次的值 */
-const PROGRESS_DEBOUNCE_MS = 500;
+/**
+ * +/- 連按時的合併視窗；一列只會送出最後一次的值。
+ *
+ * 拉長到 1.5 秒是因為每一趟 POST 都是完整的 GAS 往返（冷啟動好幾秒），
+ * 而零星的單次寫入最容易撞到 exec 那個間歇性 404。切走頁面時本來就會補送，拉長不會漏存
+ */
+const PROGRESS_DEBOUNCE_MS = 1500;
 
 const cacheKey = (account: string) => `animeCache:${account}`;
 
