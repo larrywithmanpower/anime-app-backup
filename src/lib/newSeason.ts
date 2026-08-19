@@ -29,6 +29,12 @@ export interface NewSeasonTarget {
   season: number;
   /** 沿用原名稱的寫法：「一念永恆 第三季」→「一念永恆 第四季」 */
   name: string;
+  /**
+   * 這一季是不是已經開播。
+   * TVmaze 連「已宣布但還沒排播出日」的季別都收，那種加進來也沒東西可看，
+   * 所以要能區分，讓加入時預設成「待看」而不是「在追」
+   */
+  started: boolean;
 }
 
 /**
@@ -49,5 +55,10 @@ export function newSeasonTarget(item: AnimeItem): NewSeasonTarget | null {
 
   const digitStyle = /^[0-9]+$/.test(match[1]);
   const replaced = match[0].replace(match[1], digitStyle ? String(season) : toChineseNumber(season));
-  return { season, name: item.name.replace(match[0], replaced) };
+
+  // K 欄裝的是新季最早的播出日；空的代表播出日未定，未來的日期代表還沒開播
+  const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
+  const started = !!item.nextEpisodeDate && item.nextEpisodeDate <= today;
+
+  return { season, name: item.name.replace(match[0], replaced), started };
 }

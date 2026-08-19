@@ -99,7 +99,8 @@ export default function AnimeTracker() {
     setSeasonDraft({
       name,
       progress: '0',
-      status: 'watching',
+      // 還沒開播（含播出日未定）的季別加進「在追」會是一部沒東西可看的作品，放待看才對
+      status: newSeasonTarget(item)?.started ? 'watching' : 'plan',
       category: item.category,
       // 同系列沿用上一季的封面，總比空白好；使用者要換可以之後編輯
       coverImage: item.coverImage,
