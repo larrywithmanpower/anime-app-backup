@@ -224,6 +224,18 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
       return true;
     } catch (err) {
       console.error('Failed to add item:', err);
+
+      // exec 端點會間歇性回 404、連線也可能逾時，但後端其實已經寫進去了。
+      // 直接報失敗會誘使使用者再按一次，清單裡就多出一筆一模一樣的（實測發生過）。
+      // 所以回頭讀一次真實狀態再決定要不要說失敗
+      const items = await fetchData();
+      const name = draft.name.trim();
+      if (items.some(item => item.name.trim() === name)) {
+        setShowAddItem(false);
+        pushToast(`已加入「${name}」`, 'success');
+        return true;
+      }
+
       pushToast(`新增失敗：${(err as Error).message}`);
       return false;
     } finally {
