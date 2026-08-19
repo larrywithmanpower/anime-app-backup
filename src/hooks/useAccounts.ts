@@ -14,7 +14,13 @@ export function useAccounts() {
   const [verifying, setVerifying] = useState(false);
   const [showCreateAccount, setShowCreateAccount] = useState(false);
 
-  const fetchAccountList = async (isSilent = false) => {
+  /**
+   * 抓帳號列表。**只有登入畫面需要**，主畫面一律不要呼叫。
+   *
+   * `getSheets` 實測要 9～23 秒（GAS 冷啟動 + openById），而 Apps Script 對同一個
+   * 使用者的執行會排隊，跟讀清單同時發等於讓清單卡在它後面。列表本身畫面又沒在用
+   */
+  const fetchAccountList = async () => {
     if (!APPS_SCRIPT_URL) {
       console.error('Apps Script URL is missing');
       setInitializing(false);
@@ -23,21 +29,11 @@ export function useAccounts() {
     try {
       const res = await fetch(`${APPS_SCRIPT_URL}?action=getSheets`);
       const data = await res.json();
-      if (Array.isArray(data)) {
-        setAccounts(data);
-        const saved = localStorage.getItem('lastAccount');
-        const matched = saved ? data.find((acc: string) => acc.toLowerCase() === saved.toLowerCase()) : null;
-        if (matched) {
-          setCurrentAccount(matched);
-          setIsLoggedIn(true);
-        }
-      }
+      if (Array.isArray(data)) setAccounts(data);
     } catch (err) {
       console.error('Failed to fetch accounts:', err);
     } finally {
-      if (!isSilent) {
-        setInitializing(false);
-      }
+      setInitializing(false);
     }
   };
 
@@ -112,8 +108,9 @@ export function useAccounts() {
         return;
       }
 
+      // 不再重抓帳號列表：那是一趟 9～23 秒的 getSheets，而剛建好的名稱這裡本來就有
       setShowCreateAccount(false);
-      await fetchAccountList();
+      setAccounts(prev => [...prev, name]);
       setCurrentAccount(name);
       localStorage.setItem('lastAccount', name);
       setIsLoggedIn(true);
@@ -124,16 +121,15 @@ export function useAccounts() {
     }
   };
 
-  // 初始化：優先從 localStorage 讀取帳號加速啟動
+  // 初始化：有記住的帳號就直接進主畫面，一次 GAS 都不打
   useEffect(() => {
     const saved = localStorage.getItem('lastAccount');
     if (saved) {
       setCurrentAccount(saved);
       setIsLoggedIn(true);
-      setInitializing(false); // 已有帳號，直接進入主介面
-      fetchAccountList(true); // 背景同步帳號列表
+      setInitializing(false);
     } else {
-      fetchAccountList(); // 正常初始化
+      fetchAccountList();
     }
   }, []);
 
