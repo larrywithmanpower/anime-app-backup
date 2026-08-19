@@ -32,8 +32,8 @@ export async function gasGet<T>(params: Record<string, string>, isValid: (json: 
  */
 const POST_TIMEOUT_MS = 45000;
 
-/** POST；GAS 會 302 轉址，必須 follow。不重試——重送有機會寫入兩次 */
-export async function gasPost<T>(body: Record<string, unknown>): Promise<T> {
+/** POST；GAS 會 302 轉址，必須 follow */
+async function postOnce<T>(body: Record<string, unknown>): Promise<T> {
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     redirect: 'follow',
@@ -49,4 +49,25 @@ export async function gasPost<T>(body: Record<string, unknown>): Promise<T> {
   const result = await res.json();
   if (!res.ok || result?.error) throw new Error(result?.error || `HTTP ${res.status}`);
   return result as T;
+}
+
+/**
+ * 寫入 GAS。
+ *
+ * 預設**不重試**——新增與刪除重送會多寫一筆 / 多刪一列。
+ * `idempotent` 是給「把某一列的某幾格設成指定值」這種動作用的（改進度、改狀態、
+ * 編輯欄位）：重送只是把同樣的值再寫一次，結果一樣。exec 端點約 8 次會壞 1 次，
+ * 不重試的話使用者按 ＋ 加到 91 會被打回 88，比重送一次的風險糟得多
+ */
+export async function gasPost<T>(
+  body: Record<string, unknown>,
+  { idempotent = false } = {}
+): Promise<T> {
+  try {
+    return await postOnce<T>(body);
+  } catch (err) {
+    if (!idempotent) throw err;
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    return postOnce<T>(body);
+  }
 }

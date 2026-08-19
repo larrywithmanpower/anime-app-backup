@@ -32,10 +32,10 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
 ### 兩層關鍵理解
 
 1. **後端即 Google Apps Script**：`apps-script-code.gs` 是整個後端，部署於 Google。前端所有 CRUD 都打 `NEXT_PUBLIC_APPS_SCRIPT_URL`（`GET ?action=getSheets|...` 與 `POST` body `{action, sheet, ...}`）。修改 `.gs` 後必須在 GAS 後台手動「部署 > 管理部署 > 編輯 > 版本：全新版本」才會生效。
-2. **Google Sheets 當資料庫**：每個「帳號」對應一張 sheet 分頁，固定 12 欄 schema：
+2. **Google Sheets 當資料庫**：每個「帳號」對應一張 sheet 分頁，固定 13 欄 schema：
    - A=`最後更新時間`、B=`作品名稱`、C=`目前進度`、D=`總集數`、E=`狀態`
    - F=`觀看連結`、G=`封面圖`、H=`BangumiID`、I=`類型`
-   - J=`TVmazeID`、K=`下一集日期`、L=`下一集資訊`
+   - J=`TVmazeID`、K=`下一集日期`、L=`下一集資訊`、M=`本季總集數`
    - J 由使用者在前端手動綁定；K / L 由 GAS 的 `refreshSchedule()` 每日回填，前端只讀（綁定當下那一次除外）
    - K 欄在 `ensureSchema` 被設成純文字格式。**不要拿掉**：讓 Sheets 認成日期的話，讀出來是 Date 物件、JSON 化後變 UTC，前端整整差一天（`useAnimeList` 的 `parseAirdate` 是第二道防線）
    - 第 1 列為表頭（凍結），`rowNumber`（實際 Sheet 列號，從 2 起算）是前端做更新的唯一定位鍵，比名稱比對更可靠
@@ -58,6 +58,8 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
    - **TVmaze 只收英文名**，中文關鍵字對日番一律 0 筆。`ScheduleBinder` 搜不到時會拿 `bangumiId` 去 `fetchAltNames()` 撈原文名與「别名」（Bangumi 的別名欄剛好收英文名），再用 `bareTitle()` 削掉「Season 2」「III」「-副標-」這類後綴重搜——TVmaze 收的是整部作品，帶季別後綴會整組落空（實測「Kaiju No. 8 Season 2」0 筆、去掉才中）。使用者照打中文即可
    - `countAiredEpisodes()` 算的是**已播集數**（`airdate <= today`），不是分集清單長度：TVmaze 連已公布未播的都收，拿它當分母會憑空多幾集。名稱有「第X季」就只算那一季（`parseSeasonFromName`），季別在 TVmaze 對不上時退回整部
    - **D 欄雖名為「總集數」，實際存的是已播集數**，且 `refreshSchedule` 每天覆蓋。代價是綁了 TVmaze 的作品手動改 D 欄隔天會被蓋回去
+   - **M 欄「本季總集數」才是這一季總共要出幾集**（`countSeasonEpisodes`，不濾播出日），同樣每天覆蓋——TVmaze 只收已公布的集數，加播會讓它變大。兩欄分工：D 是進度條分母與 ＋ 的上限（追不到還沒播的集數），M 是「追完了沒」的判斷依據
+   - 因此卡片上的「已追平 · 標為完結」看的是 M 不是 D：史萊姆已播 90 集、這季排到 96，追到 90 只是追上最新一集，不是完結。沒有 M（沒綁 TVmaze、手動建立）才退回「追平且沒有下一集」
 
 5. **已完結作品的新季偵測**：`refreshSchedule` 連 `done` 的也掃（只跳過 `dropped`），但 K / L 欄改裝 `findNewSeasons()` 的結果而不是下一集。
    - 判定方式：TVmaze 分集裡有 `season >` 名稱解析出來的季別，就寫成「第 4 季 · 已開播 · 已播 7 集」這種提示
@@ -81,7 +83,7 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
 - `src/lib/bangumi.ts`：Bangumi 搜尋封裝
 - `src/lib/tvmaze.ts`：TVmaze 搜尋、「下一集」與已播集數計算
 - `src/lib/newSeason.ts`：把 GAS 寫的新季提示反推成「該加進清單的那一季」
-- `src/lib/gas.ts`：GAS webhook 的共用 GET / POST。`/exec` 端點會間歇性回 404（實測約 8 次 1 次，掛的是轉址到 `script.googleusercontent.com` 那段），所以 GET 一律重試一次；POST **不重試**（重送有機會寫入兩次），改由呼叫端自行決定要 refetch 還是回頭讀狀態
+- `src/lib/gas.ts`：GAS webhook 的共用 GET / POST。`/exec` 端點會間歇性回 404（實測約 8 次 1 次，掛的是轉址到 `script.googleusercontent.com` 那段），所以 GET 一律重試一次；POST **預設不重試**（重送有機會寫入兩次），改由呼叫端自行決定要 refetch 還是回頭讀狀態。只有「把某一列的某幾格設成指定值」這種冪等動作（改進度 `update`、改狀態與編輯欄位 `updateMeta`）才帶 `{ idempotent: true }` 自動重試一次——不重試的話 8 次會有 1 次把使用者剛加的集數打回原值
 - `src/lib/calendarSetting.ts`：行事曆開關的讀寫
 - `src/lib/watchUrl.ts`：gimy 網址解析與重組（網域存 `localStorage.gimyDomain`）
 - `src/components/ScheduleBinder.tsx`：TVmaze 綁定 UI，新增與編輯兩個 modal 共用

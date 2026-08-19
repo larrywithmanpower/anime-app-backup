@@ -254,7 +254,9 @@ const AnimeCard = React.memo(function AnimeCard({
             {isNumeric && (
               <button
                 onClick={() => onIncrement(item)}
-                className="flex h-9 w-8 items-center justify-center rounded-md bg-accent-soft text-accent-hi transition-colors hover:bg-accent hover:text-white active:scale-95"
+                disabled={caughtUp}
+                title={caughtUp ? '已經追到最新一集了' : undefined}
+                className="flex h-9 w-8 items-center justify-center rounded-md bg-accent-soft text-accent-hi transition-colors hover:bg-accent hover:text-white active:scale-95 disabled:pointer-events-none disabled:opacity-30"
                 aria-label="增加一集"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-3.5 w-3.5">

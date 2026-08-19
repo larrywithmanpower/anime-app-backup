@@ -218,6 +218,8 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   };
 
   const postAction = <T = unknown,>(body: Record<string, unknown>) => gasPost<T>(body);
+  /** 「把某一列設成指定值」類的寫入，重送結果一樣，交給 gasPost 自動重試一次 */
+  const postIdempotent = (body: Record<string, unknown>) => gasPost(body, { idempotent: true });
 
   const handleManualRefresh = () => {
     fetchData();
@@ -320,7 +322,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     setItemToEdit(null);
 
     try {
-      await postAction({
+      await postIdempotent({
         action: 'updateMeta',
         sheet: currentAccount,
         row: item.rowNumber,
@@ -342,7 +344,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     setList(prev => prev.map(i => (i.rowNumber === item.rowNumber ? { ...i, status } : i)));
 
     try {
-      await postAction({ action: 'updateMeta', sheet: currentAccount, row: item.rowNumber, status });
+      await postIdempotent({ action: 'updateMeta', sheet: currentAccount, row: item.rowNumber, status });
     } catch (err) {
       console.error('Failed to set status:', err);
       pushToast(`狀態未存檔：${(err as Error).message}`);
@@ -354,7 +356,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const commitProgress = async (rowNumber: number, progress: string) => {
     pendingProgressRef.current.delete(rowNumber);
     try {
-      await postAction({ action: 'update', sheet: currentAccount, row: rowNumber, progress });
+      await postIdempotent({ action: 'update', sheet: currentAccount, row: rowNumber, progress });
       committedProgressRef.current.set(rowNumber, progress);
       setList(prev => {
         const next = prev.map(i => (i.rowNumber === rowNumber ? { ...i, date: todayLabel() } : i));
@@ -407,6 +409,10 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
   const handleIncrement = (item: AnimeItem) => {
     const current = parseInt(item.progress || '0', 10);
     const base = Number.isNaN(current) ? 0 : current;
+    // D 欄是已播集數，追不到還沒播的集數，所以 ＋ 到最新一集就停（91 / 90 是錯的畫面）。
+    // TVmaze 偶爾會慢一天，真的多看了一集可以直接改輸入框，那條路不設限
+    const total = parseInt(item.totalEpisodes, 10);
+    if (!Number.isNaN(total) && total > 0 && base >= total) return;
     applyProgress(item, String(base + 1));
   };
 
