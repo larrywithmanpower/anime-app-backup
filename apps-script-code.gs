@@ -267,6 +267,8 @@ function deleteItem(ss, sheetName, row) {
  */
 
 var CALENDAR_NAME = '追番';
+// E 欄的合法值；舊帳號有不少列是空的或殘留 TRUE/FALSE
+var VALID_STATUS = {watching: true, plan: true, done: true, dropped: true};
 // 提醒時間（當天幾點跳通知）。全天事件的提醒只能綁在午夜，改用定時事件才叫得動
 var NOTIFY_HOUR = 20;
 // 只把這麼多天內的更新寫進行事曆，避免長篇連載一次灌爆整年
@@ -349,8 +351,11 @@ function refreshSchedule() {
 
     for (var r = 0; r < rows.length; r++) {
       var name = String(rows[r][1] || '');
-      var status = String(rows[r][4] || '');
       var tvmazeId = String(rows[r][9] || '');
+      // 與前端 parseStatus 同一套寬鬆解析：舊帳號有很多列 E 欄是空的，
+      // 畫面上顯示為「在追」，這裡若照字面比對就會整批被跳過
+      var status = String(rows[r][4] || '');
+      if (!VALID_STATUS[status]) status = 'watching';
 
       if (!name || !tvmazeId) continue;
       if (status !== 'watching' && status !== 'plan') continue;
