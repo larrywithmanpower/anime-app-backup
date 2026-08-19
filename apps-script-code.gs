@@ -16,8 +16,10 @@
  * 不需要手動清理舊資料。
  */
 
-var COLUMN_COUNT = 12;
-var HEADERS = ['最後更新時間', '作品名稱', '目前進度', '總集數', '狀態', '觀看連結', '封面圖', 'BangumiID', '類型', 'TVmazeID', '下一集日期', '下一集資訊'];
+var COLUMN_COUNT = 13;
+// D 欄「總集數」實際裝的是已播集數（進度條分母，回答「離最新一集還差幾集」）；
+// M 欄才是這一季總共要出幾集，只用來判斷追完了沒
+var HEADERS = ['最後更新時間', '作品名稱', '目前進度', '總集數', '狀態', '觀看連結', '封面圖', 'BangumiID', '類型', 'TVmazeID', '下一集日期', '下一集資訊', '本季總集數'];
 
 function doGet(e) {
   try {
@@ -194,7 +196,8 @@ function updateMeta(ss, sheetName, row, data) {
     {key: 'category', col: 9},
     {key: 'tvmazeId', col: 10},
     {key: 'nextEpisodeDate', col: 11},
-    {key: 'nextEpisodeLabel', col: 12}
+    {key: 'nextEpisodeLabel', col: 12},
+    {key: 'seasonEpisodes', col: 13}
   ];
 
   var touched = false;
@@ -246,7 +249,8 @@ function addNewItem(ss, sheetName, data) {
     data.category || "",
     data.tvmazeId || "",
     data.nextEpisodeDate || "",
-    data.nextEpisodeLabel || ""
+    data.nextEpisodeLabel || "",
+    data.seasonEpisodes || ""
   ]];
 
   sheet.getRange(newRow, 1, 1, COLUMN_COUNT).setValues(values);
@@ -445,7 +449,7 @@ function parseSeasonFromName(name) {
  * 這種年份季）時退回整部，不硬猜。
  * 這段邏輯與前端 src/lib/tvmaze.ts 的 countAiredEpisodes 必須一致。
  */
-function countAiredEpisodes(name, episodes, today) {
+function seasonPool(name, episodes) {
   var season = parseSeasonFromName(name);
 
   var pool = [];
@@ -454,7 +458,20 @@ function countAiredEpisodes(name, episodes, today) {
       if (episodes[i].season === season) pool.push(episodes[i]);
     }
   }
-  if (!pool.length) pool = episodes;
+  return pool.length ? pool : episodes;
+}
+
+/**
+ * 這一季總共要出幾集（含已公布但還沒播的）。
+ * 只拿來判斷「追完了沒」，不當進度條的分母——分母是已播集數。
+ * 這個數字會浮動：TVmaze 只收已公布的集數，之後加播就會變多。
+ */
+function countSeasonEpisodes(name, episodes) {
+  return seasonPool(name, episodes).length;
+}
+
+function countAiredEpisodes(name, episodes, today) {
+  var pool = seasonPool(name, episodes);
 
   var aired = 0;
   for (var j = 0; j < pool.length; j++) {
@@ -522,7 +539,8 @@ function fetchShowSchedule(tvmazeId, name, today) {
   return {
     next: pickNextEpisode(episodes, today),
     newSeasons: findNewSeasons(name, episodes, today),
-    airedEpisodes: countAiredEpisodes(name, episodes, today)
+    airedEpisodes: countAiredEpisodes(name, episodes, today),
+    seasonEpisodes: countSeasonEpisodes(name, episodes)
   };
 }
 
@@ -592,6 +610,11 @@ function refreshSchedule() {
       // 代價是綁了 TVmaze 的作品，手動改的總集數隔天會被蓋回去
       if (schedule.airedEpisodes > 0) {
         sheet.getRange(rowIndex, 4).setValue(schedule.airedEpisodes);
+      }
+
+      // 本季總集數也會變（TVmaze 只收已公布的集數，加播就會多），同樣每天覆蓋
+      if (schedule.seasonEpisodes > 0) {
+        sheet.getRange(rowIndex, 13).setValue(schedule.seasonEpisodes);
       }
 
       if (!done && calendar && info && info.date <= horizon) {

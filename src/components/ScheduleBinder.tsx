@@ -25,8 +25,11 @@ interface ScheduleBinderProps {
   bangumiId: string;
   value: ScheduleBinding;
   onChange: (next: ScheduleBinding) => void;
-  /** 綁定成功時回填總集數，讓使用者存檔前還能改 */
-  onTotalEpisodes: (total: string) => void;
+  /**
+   * 綁定成功時回填集數，讓使用者存檔前還能改。
+   * aired 是進度條的分母（已播到第幾集），season 只用來判斷追完了沒
+   */
+  onEpisodeCounts: (counts: { aired: string; season: string }) => void;
 }
 
 const EMPTY: ScheduleBinding = { tvmazeId: '', nextEpisodeDate: '', nextEpisodeLabel: '' };
@@ -44,7 +47,7 @@ export default function ScheduleBinder({
   bangumiId,
   value,
   onChange,
-  onTotalEpisodes,
+  onEpisodeCounts,
 }: ScheduleBinderProps) {
   const [candidates, setCandidates] = useState<TvmazeResult[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -79,13 +82,16 @@ export default function ScheduleBinder({
     setBinding(show.id);
     setError('');
     try {
-      const { next, airedEpisodes } = await fetchShowSchedule(show.id, name);
+      const { next, airedEpisodes, seasonEpisodes } = await fetchShowSchedule(show.id, name);
       onChange({
         tvmazeId: String(show.id),
         nextEpisodeDate: next?.date || '',
         nextEpisodeLabel: next?.label || '',
       });
-      if (airedEpisodes > 0) onTotalEpisodes(String(airedEpisodes));
+      onEpisodeCounts({
+        aired: airedEpisodes > 0 ? String(airedEpisodes) : '',
+        season: seasonEpisodes > 0 ? String(seasonEpisodes) : '',
+      });
       setCandidates(null);
       // 綁定成功但查無未來集數時要講清楚，否則會被當成綁定失敗
       if (!next) setError('已綁定，但這部目前沒有排定的下一集');

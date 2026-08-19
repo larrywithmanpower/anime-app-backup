@@ -177,22 +177,39 @@ export function parseSeasonFromName(name: string): number {
  *
  * 這段邏輯與 apps-script-code.gs 的 countAiredEpisodes 必須一致。
  */
+export function seasonPool(name: string, episodes: RawEpisode[]): RawEpisode[] {
+  const season = parseSeasonFromName(name);
+  const inSeason = season > 0 ? episodes.filter(ep => ep.season === season) : [];
+  return inSeason.length > 0 ? inSeason : episodes;
+}
+
 export function countAiredEpisodes(
   name: string,
   episodes: RawEpisode[],
   today = todayInTaipei()
 ): number {
-  const season = parseSeasonFromName(name);
-  const inSeason = season > 0 ? episodes.filter(ep => ep.season === season) : [];
-  const pool = inSeason.length > 0 ? inSeason : episodes;
+  return seasonPool(name, episodes).filter(ep => ep.airdate && ep.airdate <= today).length;
+}
 
-  return pool.filter(ep => ep.airdate && ep.airdate <= today).length;
+/**
+ * 這一季總共要出幾集（含已公布但還沒播的）。
+ *
+ * 只用來判斷「追完了沒」，不拿來當進度條的分母——分母是已播集數，
+ * 使用者要看的是「我離最新一集差幾集」。追平已播只代表追上最新一集，
+ * 史萊姆 90/90 但這季排到 96，還沒完結。
+ *
+ * 注意這個數字會浮動：TVmaze 只收已公布的集數，之後加播就會變多。
+ */
+export function countSeasonEpisodes(name: string, episodes: RawEpisode[]): number {
+  return seasonPool(name, episodes).length;
 }
 
 export interface ShowSchedule {
   next: NextEpisode | null;
   /** 到今天為止已播出的集數；0 代表查不到 */
   airedEpisodes: number;
+  /** 這一季總共要出幾集（含未播）；0 代表查不到 */
+  seasonEpisodes: number;
 }
 
 /** 取得指定作品的下一集與最新集數；全部播完（或無排程）時 next 為 null */
@@ -207,5 +224,9 @@ export async function fetchShowSchedule(
 
   const json = await res.json();
   const episodes: RawEpisode[] = json?._embedded?.episodes || [];
-  return { next: pickNextEpisode(episodes), airedEpisodes: countAiredEpisodes(name, episodes) };
+  return {
+    next: pickNextEpisode(episodes),
+    airedEpisodes: countAiredEpisodes(name, episodes),
+    seasonEpisodes: countSeasonEpisodes(name, episodes),
+  };
 }

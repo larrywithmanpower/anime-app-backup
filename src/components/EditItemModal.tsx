@@ -19,6 +19,8 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
   const [name, setName] = useState(item.name);
   const [progress, setProgress] = useState(item.progress);
   const [totalEpisodes, setTotalEpisodes] = useState(item.totalEpisodes);
+  // 只拿來判斷追完了沒，表單上不露臉
+  const [seasonEpisodes, setSeasonEpisodes] = useState(item.seasonEpisodes);
   const [category, setCategory] = useState(item.category);
   const [status, setStatus] = useState<WatchStatus>(item.status);
   const [watchUrl, setWatchUrl] = useState(item.watchUrl);
@@ -59,6 +61,7 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
       name,
       progress: progress.trim(),
       totalEpisodes: /^\d+$/.test(totalEpisodes.trim()) ? totalEpisodes.trim() : '',
+      seasonEpisodes,
       status,
       watchUrl: watchUrl.trim(),
       category,
@@ -283,7 +286,10 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
           bangumiId={bangumiId}
           value={schedule}
           onChange={setSchedule}
-          onTotalEpisodes={setTotalEpisodes}
+          onEpisodeCounts={({ aired, season }) => {
+            if (aired) setTotalEpisodes(aired);
+            if (season) setSeasonEpisodes(season);
+          }}
         />
       </div>
     </Modal>

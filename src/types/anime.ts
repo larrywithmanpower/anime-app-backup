@@ -29,6 +29,11 @@ export interface AnimeItem {
   nextEpisodeDate: string;
   /** 下一集顯示文字，例如「第 188 集（S8E12）」 */
   nextEpisodeLabel: string;
+  /**
+   * 這一季總共要出幾集（含未播）；空字串代表未知。
+   * 只用來判斷追完了沒——進度條的分母仍是 totalEpisodes（已播集數）
+   */
+  seasonEpisodes: string;
 }
 
 /** Sheet E 欄可能殘留舊 AI 功能的 TRUE/FALSE，一律回退為在追 */

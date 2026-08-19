@@ -35,6 +35,8 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
   const [name, setName] = useState(initial?.name || '');
   const [progress, setProgress] = useState(initial?.progress || '0');
   const [totalEpisodes, setTotalEpisodes] = useState(initial?.totalEpisodes || '');
+  // 只拿來判斷追完了沒，不在表單上露臉——多一個數字欄位只會讓人搞混
+  const [seasonEpisodes, setSeasonEpisodes] = useState(initial?.seasonEpisodes || '');
   const [category, setCategory] = useState(initial?.category || '');
   const [status, setStatus] = useState<WatchStatus>(initial?.status || 'watching');
   const [watchUrl, setWatchUrl] = useState(initial?.watchUrl || '');
@@ -94,7 +96,7 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
 
     const controller = new AbortController();
     fetchShowSchedule(initial.tvmazeId, initial.name, controller.signal)
-      .then(({ next, airedEpisodes }) => {
+      .then(({ next, airedEpisodes, seasonEpisodes: season }) => {
         if (controller.signal.aborted) return;
         if (next) {
           setSchedule({
@@ -104,6 +106,7 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
           });
         }
         if (airedEpisodes > 0) setTotalEpisodes(String(airedEpisodes));
+        if (season > 0) setSeasonEpisodes(String(season));
       })
       .catch(err => console.error(err));
 
@@ -114,7 +117,10 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
   const pickResult = (result: BangumiResult) => {
     // Bangumi 回的是簡體中文名，直接帶入讓使用者自己改成習慣的寫法
     setName(result.nameCn || result.name);
+    // Bangumi 的 eps 是整季集數，兩邊都先帶；綁了 TVmaze 之後
+    // 已播集數會被覆蓋成實際播出數，本季總集數則維持同一個意思
     setTotalEpisodes(result.episodes > 0 ? String(result.episodes) : '');
+    setSeasonEpisodes(result.episodes > 0 ? String(result.episodes) : '');
     setCategory(result.category);
     setCoverImage(result.cover);
     setBangumiId(String(result.id));
@@ -126,6 +132,7 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
   const startManual = () => {
     setName(keyword.trim());
     setTotalEpisodes('');
+    setSeasonEpisodes('');
     setCategory('');
     setCoverImage('');
     setBangumiId('');
@@ -139,6 +146,7 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
       name,
       progress: progress.trim() || '0',
       totalEpisodes: /^\d+$/.test(totalEpisodes.trim()) ? totalEpisodes.trim() : '',
+      seasonEpisodes,
       status,
       watchUrl: watchUrl.trim(),
       coverImage,
@@ -439,7 +447,10 @@ export default function AddItemModal({ refreshing, initial, existing, onAdd, onC
           bangumiId={bangumiId}
           value={schedule}
           onChange={setSchedule}
-          onTotalEpisodes={setTotalEpisodes}
+          onEpisodeCounts={({ aired, season }) => {
+            if (aired) setTotalEpisodes(aired);
+            if (season) setSeasonEpisodes(season);
+          }}
         />
       </div>
     </Modal>

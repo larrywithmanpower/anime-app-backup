@@ -35,6 +35,7 @@ export interface ItemDraft {
   tvmazeId?: string;
   nextEpisodeDate?: string;
   nextEpisodeLabel?: string;
+  seasonEpisodes?: string;
 }
 
 // 將日期字串轉成毫秒；無效或空值回傳 0（排到最後）
@@ -72,6 +73,7 @@ const mapRows = (rows: unknown[][]): AnimeItem[] =>
       tvmazeId: String(row[9] ?? ''),
       nextEpisodeDate: parseAirdate(row[10]),
       nextEpisodeLabel: String(row[11] ?? ''),
+      seasonEpisodes: parseTotalEpisodes(row[12]),
     }))
     .filter(item => item.name);
 
@@ -116,6 +118,7 @@ const draftToItem = (draft: ItemDraft, rowNumber: number): AnimeItem => ({
   tvmazeId: draft.tvmazeId ?? '',
   nextEpisodeDate: draft.nextEpisodeDate ?? '',
   nextEpisodeLabel: draft.nextEpisodeLabel ?? '',
+  seasonEpisodes: parseTotalEpisodes(draft.seasonEpisodes),
 });
 
 export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
@@ -238,6 +241,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         tvmazeId: draft.tvmazeId ?? '',
         nextEpisodeDate: draft.nextEpisodeDate ?? '',
         nextEpisodeLabel: draft.nextEpisodeLabel ?? '',
+        seasonEpisodes: draft.seasonEpisodes ?? '',
       });
       setShowAddItem(false);
 

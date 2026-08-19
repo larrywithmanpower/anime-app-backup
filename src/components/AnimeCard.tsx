@@ -74,6 +74,15 @@ const AnimeCard = React.memo(function AnimeCard({
   // 完結的作品，那兩欄裝的是 GAS 查到的新季提示，不是下一集
   const newSeason = item.status === 'done' ? item.nextEpisodeLabel : '';
 
+  // 「追完了沒」要看本季總集數（含還沒播的），不是進度條分母的已播集數——
+  // 追平已播只代表追上最新一集（史萊姆 90/90，但這季排到 96，還有 6 集要播）。
+  // 沒有本季總集數（沒綁 TVmaze、手動建立的）才退回「追平且沒有下一集」
+  const seasonTotal = parseInt(item.seasonEpisodes, 10);
+  const finished =
+    !Number.isNaN(seasonTotal) && seasonTotal > 0
+      ? !Number.isNaN(current) && current >= seasonTotal
+      : caughtUp && !nextEpisode;
+
   return (
     <div className="fade-up group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-hi hover:bg-surface-hi">
       {/* 封面：Bangumi 沒圖或載入失敗時退成首字，維持版面對齊。
@@ -257,8 +266,8 @@ const AnimeCard = React.memo(function AnimeCard({
           </div>
         </div>
 
-        {/* 追平總集數時直接給一鍵收尾，省得再開編輯視窗 */}
-        {caughtUp && item.status === 'watching' && (
+        {/* 真的追完整季才給一鍵收尾，省得再開編輯視窗 */}
+        {finished && item.status === 'watching' && (
           <button
             onClick={() => onSetStatus(item, 'done')}
             className="self-start rounded-md border border-success/40 bg-success/10 px-2 py-1 text-[11px] text-success transition-colors hover:bg-success/20"
