@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { gasGet } from '@/lib/gas';
 
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
@@ -27,7 +28,8 @@ export function useAccounts() {
   const prefetchAccountList = (): Promise<unknown> => {
     if (!APPS_SCRIPT_URL) return Promise.reject(new Error('Apps Script URL is missing'));
 
-    const pending = fetch(`${APPS_SCRIPT_URL}?action=getSheets`).then(res => res.json());
+    // 走 gasGet：exec 會間歇性回 404，它本來就會重試一次
+    const pending = gasGet<unknown>({ action: 'getSheets' }, Array.isArray);
     accountListRef.current = pending;
     pending.catch(() => {
       if (accountListRef.current === pending) accountListRef.current = null;
@@ -43,8 +45,15 @@ export function useAccounts() {
     setLoginError('');
 
     try {
-      // 登入畫面一開就在背景抓了，這裡通常直接拿到結果；還沒發過或發失敗才當場打
-      const data = await (accountListRef.current || prefetchAccountList());
+      // 登入畫面一開就在背景抓了，這裡通常直接拿到結果；還沒發過才當場打。
+      // 背景那次可能已經失敗（exec 間歇性 404），**不能讓它連累登入**——
+      // 舊版按登入是當場重新發一次，這裡要維持同樣的韌性
+      let data: unknown;
+      try {
+        data = await (accountListRef.current || prefetchAccountList());
+      } catch {
+        data = await prefetchAccountList();
+      }
       const failure = (data as { error?: string })?.error;
 
       if (failure) {

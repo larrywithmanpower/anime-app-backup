@@ -1,27 +1,64 @@
 /**
  * Google Apps Script webhook 的共用呼叫。
  *
- * exec 端點會間歇性回 404（同一個網址連打五次實測 200/200/200/404/200，
- * 轉址到 script.googleusercontent.com 那段不穩），所以讀取一律重試一次。
+ * exec 端點有兩個毛病：
+ * 1. 會間歇性回 404（同一個網址連打五次實測 200/200/200/404/200，轉址到
+ *    script.googleusercontent.com 那段不穩）
+ * 2. **單發延遲是隨機的**——同一支端點實測 2 秒到 77 秒都有，跟冷啟動沒有絕對關係
+ *
+ * 但並行不會互相拖慢（實測循序 3 發總牆鐘 40 秒、並行 3 發只要 3 秒），
+ * 所以讀取採「對衝」：第一發超過門檻還沒回來就再補一發，誰先回來用誰。
  */
 
 export const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
 
-const RETRY_DELAY_MS = 800;
+/** 第一發超過這個時間沒回來才補下一發；正常回應約 2 秒，所以多數情況只會發一發 */
+const HEDGE_AFTER_MS = 3000;
+/** 最多同時在飛的發數 */
+const MAX_ATTEMPTS = 3;
+/** 冪等寫入重送前的間隔；寫入不能對衝，只能等失敗才重試 */
+const POST_RETRY_DELAY_MS = 800;
 
-/** GET，失敗（丟例外或回非預期內容）時重試一次 */
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+/**
+ * GET；同一個請求最多對衝 MAX_ATTEMPTS 發，取最快回來且格式正確的那發。
+ *
+ * GET 沒有副作用，重複發不會寫壞資料——這是它能對衝、而 POST 不行的原因。
+ */
 export async function gasGet<T>(params: Record<string, string>, isValid: (json: unknown) => boolean): Promise<T> {
-  const query = new URLSearchParams(params).toString();
+  const url = `${APPS_SCRIPT_URL}?${new URLSearchParams(params).toString()}`;
 
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?${query}`);
-      const json = await res.json();
-      if (isValid(json) || attempt > 0) return json as T;
-    } catch (err) {
-      if (attempt > 0) throw err;
-    }
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+  // 全部都不合格時的退路：把後端第一次回的東西原封帶回去，
+  // 呼叫端才看得到 `{error: '找不到分頁'}` 這種真正的訊息，而不是被換成通用錯誤
+  let fallback: unknown;
+
+  const attempt = async (): Promise<T> => {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (fallback === undefined) fallback = json;
+    if (!isValid(json)) throw new Error('回應格式不正確');
+    return json as T;
+  };
+
+  const inFlight: Promise<T>[] = [attempt()];
+
+  for (let i = 1; i < MAX_ATTEMPTS; i++) {
+    const TIMED_OUT = Symbol('timeout');
+    const winner = await Promise.race([
+      // 目前在飛的都掛掉才會 reject，這時直接進下一輪補發
+      Promise.any(inFlight).catch(() => TIMED_OUT),
+      sleep(HEDGE_AFTER_MS).then(() => TIMED_OUT),
+    ]);
+    if (winner !== TIMED_OUT) return winner as T;
+    inFlight.push(attempt());
+  }
+
+  try {
+    return await Promise.any(inFlight);
+  } catch {
+    if (fallback !== undefined) return fallback as T;
+    throw new Error('讀取失敗');
   }
 }
 
@@ -67,7 +104,7 @@ export async function gasPost<T>(
     return await postOnce<T>(body);
   } catch (err) {
     if (!idempotent) throw err;
-    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
+    await sleep(POST_RETRY_DELAY_MS);
     return postOnce<T>(body);
   }
 }
