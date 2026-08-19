@@ -12,6 +12,12 @@ interface AnimeCardProps {
   onInputBlur: (item: AnimeItem) => void;
   onEdit: (item: AnimeItem) => void;
   onSetStatus: (item: AnimeItem, status: WatchStatus) => void;
+  /**
+   * 出了新一季、而清單裡還沒有那一季時，要幫使用者建立的名稱；空字串代表不提供入口。
+   * 刻意傳字串而不是物件，物件每次 render 都是新的會讓外層的 memo 失效
+   */
+  newSeasonName: string;
+  onAddSeason: (item: AnimeItem, name: string) => void;
 }
 
 const formatDate = (raw: string) => {
@@ -44,6 +50,8 @@ const AnimeCard = React.memo(function AnimeCard({
   onInputBlur,
   onEdit,
   onSetStatus,
+  newSeasonName,
+  onAddSeason,
 }: AnimeCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [coverFailed, setCoverFailed] = useState(false);
@@ -63,6 +71,8 @@ const AnimeCard = React.memo(function AnimeCard({
     item.status === 'watching' || item.status === 'plan'
       ? describeNextEpisode(item.nextEpisodeDate)
       : null;
+  // 完結的作品，那兩欄裝的是 GAS 查到的新季提示，不是下一集
+  const newSeason = item.status === 'done' ? item.nextEpisodeLabel : '';
 
   return (
     <div className="fade-up group flex gap-3 rounded-xl border border-line bg-surface p-3 transition-colors hover:border-line-hi hover:bg-surface-hi">
@@ -121,9 +131,34 @@ const AnimeCard = React.memo(function AnimeCard({
         <div className="flex items-center gap-2">
           {item.status === 'done' ? (
             // 已完結就別再顯示「第 0 集」或「未設定」，看完了就是看完了
-            <span className="text-[12px] text-success">
-              已完結{hasTotal ? ` · 全 ${total} 集` : ''}
-            </span>
+            <>
+              <span className="shrink-0 text-[12px] text-success">
+                已完結{hasTotal ? ` · 全 ${total} 集` : ''}
+              </span>
+              {/* 標成完結之後這部就從視線裡消失了，出新一季得有人講一聲。
+                  那一季還沒進清單時做成按鈕：點了帶著綁好的排程去新增，不用自己重搜一次 */}
+              {newSeason &&
+                (newSeasonName ? (
+                  <button
+                    onClick={() => onAddSeason(item, newSeasonName)}
+                    title={`加入「${newSeasonName}」到清單`}
+                    className="flex min-w-0 items-center gap-1 rounded border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] leading-none text-warn transition-colors hover:border-warn hover:bg-warn/20"
+                  >
+                    <span className="truncate">{newSeason}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" className="h-2.5 w-2.5 shrink-0">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                ) : (
+                  <span
+                    title="這部後來又出了新的一季"
+                    className="min-w-0 truncate rounded border border-warn/40 bg-warn/10 px-1.5 py-0.5 text-[10px] leading-none text-warn"
+                  >
+                    {newSeason}
+                  </span>
+                ))}
+            </>
           ) : hasTotal ? (
             <>
               <div className="h-1 flex-1 overflow-hidden rounded-full bg-line">

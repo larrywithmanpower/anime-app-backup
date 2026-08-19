@@ -280,6 +280,7 @@ export default function EditItemModal({ item, onSave, onDelete, onClose }: EditI
 
         <ScheduleBinder
           name={name}
+          bangumiId={bangumiId}
           value={schedule}
           onChange={setSchedule}
           onTotalEpisodes={setTotalEpisodes}

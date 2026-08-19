@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { useAccounts } from '@/hooks/useAccounts';
-import { useAnimeList } from '@/hooks/useAnimeList';
-import { WATCH_STATUSES } from '@/types/anime';
+import { useAnimeList, type ItemDraft } from '@/hooks/useAnimeList';
+import { WATCH_STATUSES, type AnimeItem } from '@/types/anime';
+import { newSeasonTarget } from '@/lib/newSeason';
 import AnimeCard from '@/components/AnimeCard';
 import LoginScreen from '@/components/LoginScreen';
 import AddItemModal from '@/components/AddItemModal';
@@ -29,6 +30,8 @@ function SkeletonCard() {
 
 export default function AnimeTracker() {
   const [searchOpen, setSearchOpen] = useState(false);
+  // 「加入新一季」預填的草稿；null 代表新增視窗走一般的搜尋流程
+  const [seasonDraft, setSeasonDraft] = useState<ItemDraft | null>(null);
 
   const accounts = useAccounts();
   const {
@@ -83,6 +86,39 @@ export default function AnimeTracker() {
     handleInputChange,
     handleInputBlur,
   } = animeList;
+
+  // 已經在清單裡的名稱：出了新季但那一季早就加過了，就只留提示、不再給加入入口
+  const existingNames = new Set(list.map(i => i.name.trim()));
+  const pendingSeasonName = (item: AnimeItem): string => {
+    const target = newSeasonTarget(item);
+    return target && !existingNames.has(target.name) ? target.name : '';
+  };
+
+  // 不直接建立，開新增視窗讓使用者確認——名稱是推導出來的，官方譯名不見得長這樣
+  const handleAddSeason = (item: AnimeItem, name: string) => {
+    setSeasonDraft({
+      name,
+      progress: '0',
+      status: 'watching',
+      category: item.category,
+      // 同系列沿用上一季的封面，總比空白好；使用者要換可以之後編輯
+      coverImage: item.coverImage,
+      // 同一個 TVmaze 作品涵蓋所有季別，直接沿用就不必再搜一次
+      tvmazeId: item.tvmazeId,
+    });
+    setShowAddItem(true);
+  };
+
+  // 草稿要在開／關兩端都清掉：新增成功是由 hook 關掉視窗的，殘留下來會讓下次按 ＋ 也帶著預填
+  const openAddItem = () => {
+    setSeasonDraft(null);
+    setShowAddItem(true);
+  };
+
+  const closeAddItem = () => {
+    setShowAddItem(false);
+    setSeasonDraft(null);
+  };
 
   // initializing 初始為 true，SSR 與首次 client render 都是載入畫面，不會 hydration mismatch
   if (initializing) {
@@ -154,7 +190,7 @@ export default function AnimeTracker() {
               </button>
 
               <button
-                onClick={() => setShowAddItem(true)}
+                onClick={openAddItem}
                 className="flex h-8 items-center gap-1 rounded-lg bg-accent px-3 text-[13px] font-semibold text-white transition-colors hover:bg-accent-hi active:scale-95"
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="h-3.5 w-3.5">
@@ -258,6 +294,8 @@ export default function AnimeTracker() {
                     onInputBlur={handleInputBlur}
                     onEdit={setItemToEdit}
                     onSetStatus={handleSetStatus}
+                    newSeasonName={pendingSeasonName(item)}
+                    onAddSeason={handleAddSeason}
                   />
                 ))}
               </div>
@@ -274,7 +312,7 @@ export default function AnimeTracker() {
                     <p className="mb-1 text-[15px] font-semibold text-text">還沒有任何作品</p>
                     <p className="mb-5 text-[12px] text-faint">新增時可以搜尋，會自動帶封面與總集數</p>
                     <button
-                      onClick={() => setShowAddItem(true)}
+                      onClick={openAddItem}
                       className="rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-accent-hi"
                     >
                       新增第一部
@@ -293,9 +331,11 @@ export default function AnimeTracker() {
 
       {showAddItem && (
         <AddItemModal
+          key={seasonDraft?.name || 'blank'}
           refreshing={refreshing}
+          initial={seasonDraft}
           onAdd={handleAddItem}
-          onClose={() => setShowAddItem(false)}
+          onClose={closeAddItem}
         />
       )}
 

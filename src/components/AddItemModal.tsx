@@ -6,36 +6,39 @@ import { CATEGORIES, WATCH_STATUSES, WatchStatus } from '@/types/anime';
 import { searchBangumi, BangumiResult } from '@/lib/bangumi';
 import { describeWatchUrl } from '@/lib/watchUrl';
 import ScheduleBinder, { ScheduleBinding } from './ScheduleBinder';
+import { fetchShowSchedule } from '@/lib/tvmaze';
 import type { ItemDraft } from '@/hooks/useAnimeList';
 
 interface AddItemModalProps {
   refreshing: boolean;
+  /** 預填草稿；有值就直接跳過搜尋，用於「加入新一季」這種已經知道要加什麼的入口 */
+  initial?: ItemDraft | null;
   onAdd: (draft: ItemDraft) => Promise<boolean>;
   onClose: () => void;
 }
 
 const SEARCH_DEBOUNCE_MS = 400;
 
-export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModalProps) {
-  const [step, setStep] = useState<'search' | 'form'>('search');
+export default function AddItemModal({ refreshing, initial, onAdd, onClose }: AddItemModalProps) {
+  const [step, setStep] = useState<'search' | 'form'>(initial ? 'form' : 'search');
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState<BangumiResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  const [name, setName] = useState('');
-  const [progress, setProgress] = useState('0');
-  const [totalEpisodes, setTotalEpisodes] = useState('');
-  const [category, setCategory] = useState('');
-  const [status, setStatus] = useState<WatchStatus>('watching');
-  const [watchUrl, setWatchUrl] = useState('');
-  const [coverImage, setCoverImage] = useState('');
-  const [bangumiId, setBangumiId] = useState('');
+  const [name, setName] = useState(initial?.name || '');
+  const [progress, setProgress] = useState(initial?.progress || '0');
+  const [totalEpisodes, setTotalEpisodes] = useState(initial?.totalEpisodes || '');
+  const [category, setCategory] = useState(initial?.category || '');
+  const [status, setStatus] = useState<WatchStatus>(initial?.status || 'watching');
+  const [watchUrl, setWatchUrl] = useState(initial?.watchUrl || '');
+  const [coverImage, setCoverImage] = useState(initial?.coverImage || '');
+  const [bangumiId, setBangumiId] = useState(initial?.bangumiId || '');
   const [schedule, setSchedule] = useState<ScheduleBinding>({
-    tvmazeId: '',
-    nextEpisodeDate: '',
-    nextEpisodeLabel: '',
+    tvmazeId: initial?.tvmazeId || '',
+    nextEpisodeDate: initial?.nextEpisodeDate || '',
+    nextEpisodeLabel: initial?.nextEpisodeLabel || '',
   });
 
   const abortRef = useRef<AbortController | null>(null);
@@ -78,6 +81,30 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
   }, [keyword, step]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // 「加入新一季」帶進來的草稿只有 TVmaze ID，下一集與已播集數要現查。
+  // 不查也能用（GAS 每天掃描會補），但剛加進來的卡片空一整天，看起來像沒綁到
+  useEffect(() => {
+    if (!initial?.tvmazeId || initial.nextEpisodeDate) return;
+
+    const controller = new AbortController();
+    fetchShowSchedule(initial.tvmazeId, initial.name, controller.signal)
+      .then(({ next, airedEpisodes }) => {
+        if (controller.signal.aborted) return;
+        if (next) {
+          setSchedule({
+            tvmazeId: String(initial.tvmazeId),
+            nextEpisodeDate: next.date,
+            nextEpisodeLabel: next.label,
+          });
+        }
+        if (airedEpisodes > 0) setTotalEpisodes(String(airedEpisodes));
+      })
+      .catch(err => console.error(err));
+
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const pickResult = (result: BangumiResult) => {
     // Bangumi 回的是簡體中文名，直接帶入讓使用者自己改成習慣的寫法
@@ -257,11 +284,12 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
       onClose={onClose}
       footer={
         <div className="flex gap-2">
+          {/* 預填進來的沒有搜尋步驟可退，退回去只會看到空白搜尋框 */}
           <button
-            onClick={() => setStep('search')}
+            onClick={() => (initial ? onClose() : setStep('search'))}
             className="h-10 rounded-lg border border-line px-4 text-[14px] text-dim transition-colors hover:text-text"
           >
-            返回
+            {initial ? '取消' : '返回'}
           </button>
           <button
             onClick={submit}
@@ -380,6 +408,7 @@ export default function AddItemModal({ refreshing, onAdd, onClose }: AddItemModa
 
         <ScheduleBinder
           name={name}
+          bangumiId={bangumiId}
           value={schedule}
           onChange={setSchedule}
           onTotalEpisodes={setTotalEpisodes}

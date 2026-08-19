@@ -63,14 +63,10 @@ async function fetchSearch(keyword: string, signal?: AbortSignal): Promise<RawHi
   return (await res.json()) || [];
 }
 
-export async function searchTvmaze(keyword: string, signal?: AbortSignal): Promise<TvmazeResult[]> {
-  const trimmed = keyword.trim();
-  if (!trimmed) return [];
-
-  // TVmaze 的華語作品一律以簡體收錄，繁體關鍵字幾乎全數落空，
-  // 因此繁簡兩種都送（簡體結果排前面），與 Bangumi 那邊同一套做法
-  const simplified = toSimplified(trimmed);
-  const queries = simplified === trimmed ? [trimmed] : [simplified, trimmed];
+/** 同時送出多組關鍵字，合併去重；全部失敗才算失敗 */
+export async function searchTvmazeTitles(titles: string[], signal?: AbortSignal): Promise<TvmazeResult[]> {
+  const queries = [...new Set(titles.map(t => t.trim()).filter(Boolean))];
+  if (!queries.length) return [];
 
   const settled = await Promise.allSettled(queries.map(q => fetchSearch(q, signal)));
   const succeeded = settled.filter(s => s.status === 'fulfilled');
@@ -100,6 +96,27 @@ export async function searchTvmaze(keyword: string, signal?: AbortSignal): Promi
   }
 
   return results;
+}
+
+export async function searchTvmaze(keyword: string, signal?: AbortSignal): Promise<TvmazeResult[]> {
+  const trimmed = keyword.trim();
+  if (!trimmed) return [];
+
+  // TVmaze 的華語作品一律以簡體收錄，繁體關鍵字幾乎全數落空，
+  // 因此繁簡兩種都送（簡體結果排前面），與 Bangumi 那邊同一套做法
+  const simplified = toSimplified(trimmed);
+  return searchTvmazeTitles(simplified === trimmed ? [trimmed] : [simplified, trimmed], signal);
+}
+
+// TVmaze 收的是「整部作品」，季別後綴會讓它整組落空：
+// 實測「Kaiju No. 8 Season 2」0 筆、「Kaiju No. 8」1 筆；「A Will Eternal III」0 筆、去掉 III 才中
+const SEASON_TAIL = /\s+(season|staffel|part|cour)\s*\d+.*$/i;
+const SEPARATOR_TAIL = /\s*[:：\-–—].*$/;
+const ROMAN_TAIL = /\s+(i{1,3}|iv|vi{0,3}|ix|x)$/i;
+
+/** 把「Solo Leveling Season 2 -Arise from the Shadow-」削成「Solo Leveling」 */
+export function bareTitle(raw: string): string {
+  return raw.trim().replace(SEASON_TAIL, '').replace(SEPARATOR_TAIL, '').replace(ROMAN_TAIL, '').trim();
 }
 
 /** 台北時區的今天（YYYY-MM-DD）；airdate 也是這個格式，可直接字串比大小 */

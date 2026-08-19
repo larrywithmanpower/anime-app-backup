@@ -2,7 +2,15 @@
 
 import { useState } from 'react';
 import { labelClass } from './Modal';
-import { searchTvmaze, fetchShowSchedule, tvmazeShowUrl, TvmazeResult } from '@/lib/tvmaze';
+import {
+  searchTvmaze,
+  searchTvmazeTitles,
+  bareTitle,
+  fetchShowSchedule,
+  tvmazeShowUrl,
+  TvmazeResult,
+} from '@/lib/tvmaze';
+import { fetchAltNames } from '@/lib/bangumi';
 
 export interface ScheduleBinding {
   tvmazeId: string;
@@ -13,6 +21,8 @@ export interface ScheduleBinding {
 interface ScheduleBinderProps {
   /** 拿來當搜尋關鍵字的作品名稱，同時決定總集數要算整部還是只算指定的那一季 */
   name: string;
+  /** 中文搜不到時，拿來換英文關鍵字的來源；沒有就只能靠中文 */
+  bangumiId: string;
   value: ScheduleBinding;
   onChange: (next: ScheduleBinding) => void;
   /** 綁定成功時回填總集數，讓使用者存檔前還能改 */
@@ -29,7 +39,13 @@ const formatDate = (raw: string) => raw.replace(/-/g, '.').slice(5);
  * 刻意不做自動配對：華語作品的命中率大約只有一半，且同名不同季很容易配錯，
  * 錯了會每天推錯的更新提醒，比沒有提醒更糟。沿用封面那套「列候選讓人選」。
  */
-export default function ScheduleBinder({ name, value, onChange, onTotalEpisodes }: ScheduleBinderProps) {
+export default function ScheduleBinder({
+  name,
+  bangumiId,
+  value,
+  onChange,
+  onTotalEpisodes,
+}: ScheduleBinderProps) {
   const [candidates, setCandidates] = useState<TvmazeResult[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [binding, setBinding] = useState<number | null>(null);
@@ -40,7 +56,15 @@ export default function ScheduleBinder({ name, value, onChange, onTotalEpisodes 
     setSearching(true);
     setError('');
     try {
-      const found = await searchTvmaze(name);
+      let found = await searchTvmaze(name);
+
+      // TVmaze 的日番只收英文名，中文關鍵字一律 0 筆。這時去 Bangumi 撈原文名與別名，
+      // 削掉「Season 2」「III」這類季別後綴再搜一次——使用者照打中文就好
+      if (!found.length && bangumiId) {
+        const alts = await fetchAltNames(bangumiId).catch(() => [] as string[]);
+        if (alts.length) found = await searchTvmazeTitles(alts.map(bareTitle));
+      }
+
       setCandidates(found);
       if (!found.length) setError('找不到排程資料，可以改用原文名或英文名再試一次');
     } catch (err) {

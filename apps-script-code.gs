@@ -464,6 +464,54 @@ function countAiredEpisodes(name, episodes, today) {
   return aired;
 }
 
+/**
+ * 已完結的作品出了新的一季沒有。
+ *
+ * TVmaze 一個 id 就是整部作品跨所有季，所以「新一季」在資料上不是新東西，
+ * 只是「名稱寫的那一季之後還有集數」。名稱沒寫季別就沒得比，回 null。
+ *
+ * 回傳的形狀刻意與 pickNextEpisode 相同（date / label），直接沿用 K／L 兩欄：
+ * 已完結的作品本來就沒有「下一集」，那兩欄對它們一直是空的，不會打架。
+ */
+function findNewSeasons(name, episodes, today) {
+  var season = parseSeasonFromName(name);
+  if (!season) return null;
+
+  var seasons = [];
+  var total = 0;
+  var aired = 0;
+  var earliest = '';
+
+  for (var i = 0; i < episodes.length; i++) {
+    var e = episodes[i];
+    if (!(e.season > season)) continue;
+
+    if (seasons.indexOf(e.season) < 0) seasons.push(e.season);
+    total++;
+
+    // 已宣布但還沒排出播出日的季別，TVmaze 會給沒有 airdate 的空殼集數
+    var airdate = e.airdate || '';
+    if (!airdate) continue;
+    if (!earliest || airdate < earliest) earliest = airdate;
+    if (airdate <= today) aired++;
+  }
+
+  if (!seasons.length) return null;
+  seasons.sort(function (a, b) { return a - b; });
+
+  var span = seasons.length > 1
+    ? '第 ' + seasons[0] + '～' + seasons[seasons.length - 1] + ' 季'
+    : '第 ' + seasons[0] + ' 季';
+
+  var detail;
+  if (!earliest) detail = '播出日未定';
+  else if (aired === 0) detail = earliest.slice(5).replace('-', '.') + ' 開播';
+  else if (aired < total) detail = '已開播 · 已播 ' + aired + ' 集';
+  else detail = '共 ' + total + ' 集';
+
+  return {date: earliest, label: span + ' · ' + detail};
+}
+
 function fetchShowSchedule(tvmazeId, name, today) {
   var url = 'https://api.tvmaze.com/shows/' + encodeURIComponent(tvmazeId) + '?embed=episodes';
   var res = UrlFetchApp.fetch(url, {muteHttpExceptions: true});
@@ -473,13 +521,18 @@ function fetchShowSchedule(tvmazeId, name, today) {
   var episodes = (json && json._embedded && json._embedded.episodes) || [];
   return {
     next: pickNextEpisode(episodes, today),
+    newSeasons: findNewSeasons(name, episodes, today),
     airedEpisodes: countAiredEpisodes(name, episodes, today)
   };
 }
 
 /**
- * 每日觸發的主流程：掃所有分頁裡綁過 TVmaze 的在追／待看作品，
- * 回填 K／L 欄，並把近期更新寫進「追番」行事曆。
+ * 每日觸發的主流程：掃所有分頁裡綁過 TVmaze 的作品，回填 K／L 欄，
+ * 並把近期更新寫進「追番」行事曆。
+ *
+ * 已完結的作品也要掃：TVmaze 一個 id 涵蓋所有季，出了新的一季只有這裡看得到，
+ * 否則使用者得自己去查才會知道（實測一念永恆第四季已播兩個月、神墓漏了整整兩季）。
+ * 它們的 K／L 裝的是新季提示、不是下一集，也不進行事曆——完結的作品不需要每週提醒。
  */
 function refreshSchedule() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -510,7 +563,8 @@ function refreshSchedule() {
       if (!VALID_STATUS[status]) status = 'watching';
 
       if (!name || !tvmazeId) continue;
-      if (status !== 'watching' && status !== 'plan') continue;
+      // 棄追的不管，其餘（含已完結）都掃
+      if (status === 'dropped') continue;
 
       // TVmaze 是每 IP 每 10 秒 20 次，放慢一點就完全碰不到上限
       if (checked > 0) Utilities.sleep(600);
@@ -526,19 +580,22 @@ function refreshSchedule() {
       }
       if (!schedule) continue;
 
-      var next = schedule.next;
-      var rowIndex = r + 2;
-      sheet.getRange(rowIndex, 11).setValue(next ? next.date : '');
-      sheet.getRange(rowIndex, 12).setValue(next ? next.label : '');
+      // 完結的作品沒有「下一集」可言，那兩欄改裝「有沒有出新的一季」
+      var done = status === 'done';
+      var info = done ? schedule.newSeasons : schedule.next;
 
-      // 連載中的作品集數會一路往上加，所以每天覆蓋而不是只補空白。
+      var rowIndex = r + 2;
+      sheet.getRange(rowIndex, 11).setValue(info ? info.date : '');
+      sheet.getRange(rowIndex, 12).setValue(info ? info.label : '');
+
+      // 已播集數每週都在長，所以每天覆蓋而不是只補空白。
       // 代價是綁了 TVmaze 的作品，手動改的總集數隔天會被蓋回去
-      if (schedule.totalEpisodes > 0) {
-        sheet.getRange(rowIndex, 4).setValue(schedule.totalEpisodes);
+      if (schedule.airedEpisodes > 0) {
+        sheet.getRange(rowIndex, 4).setValue(schedule.airedEpisodes);
       }
 
-      if (calendar && next && next.date <= horizon) {
-        upsertReminder(calendar, name, next);
+      if (!done && calendar && info && info.date <= horizon) {
+        upsertReminder(calendar, name, info);
       }
     }
   }

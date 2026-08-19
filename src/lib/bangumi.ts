@@ -10,6 +10,7 @@
 import { toSimplified } from './t2s';
 
 const SEARCH_URL = 'https://api.bgm.tv/v0/search/subjects?limit=10';
+const SUBJECT_URL = 'https://api.bgm.tv/v0/subjects';
 
 // 2=動畫 6=三次元（日劇/歐美劇/陸劇…） 1=書籍（漫畫/小說）
 const SUBJECT_TYPES = [2, 6, 1];
@@ -86,6 +87,31 @@ async function fetchSearch(keyword: string, signal?: AbortSignal): Promise<RawSu
 
   const json = await res.json();
   return json?.data || [];
+}
+
+/**
+ * 條目的原文名與別名。
+ *
+ * 用途只有一個：TVmaze 的日番只收英文名，中文關鍵字一律 0 筆
+ *（實測「我獨自升級」「怪獸8號」皆搜無），而 Bangumi 的「别名」欄剛好收了英文名。
+ * 讓使用者照打中文，搜不到時由這裡接手換關鍵字。
+ */
+export async function fetchAltNames(subjectId: string | number, signal?: AbortSignal): Promise<string[]> {
+  const res = await fetch(`${SUBJECT_URL}/${encodeURIComponent(subjectId)}`, { signal });
+  if (!res.ok) throw new Error(`Bangumi 取得條目失敗（${res.status}）`);
+
+  const json = await res.json();
+  const names: string[] = [json?.name || ''];
+
+  const alias = (json?.infobox || []).find((box: { key?: string }) => box.key === '别名');
+  const value = alias?.value;
+  if (Array.isArray(value)) {
+    names.push(...value.map((v: { v?: string } | string) => (typeof v === 'string' ? v : v?.v || '')));
+  } else if (typeof value === 'string') {
+    names.push(value);
+  }
+
+  return names.filter(Boolean);
 }
 
 export async function searchBangumi(keyword: string, signal?: AbortSignal): Promise<BangumiResult[]> {
