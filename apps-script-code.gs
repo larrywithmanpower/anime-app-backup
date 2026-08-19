@@ -276,7 +276,12 @@ var CALENDAR_DAYS_AHEAD = 14;
 
 function getTrackerCalendar() {
   var found = CalendarApp.getCalendarsByName(CALENDAR_NAME);
-  return found.length ? found[0] : CalendarApp.createCalendar(CALENDAR_NAME);
+  if (found.length) return found[0];
+
+  // 新建的日曆預設是 UTC，事件時間雖然仍正確，但之後要改成全天事件會整批位移一天
+  var created = CalendarApp.createCalendar(CALENDAR_NAME);
+  created.setTimeZone('Asia/Taipei');
+  return created;
 }
 
 function todayStamp() {
