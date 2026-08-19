@@ -25,12 +25,25 @@ export async function gasGet<T>(params: Record<string, string>, isValid: (json: 
   }
 }
 
+/**
+ * GAS 一筆寫入約 20 秒（冷啟動 + ensureSchema + 寫格子），所以上限抓得寬。
+ * 但一定要有上限：沒有的話連線卡住就永遠 pending，畫面會一直停在「新增中…」，
+ * 使用者只能重按，而重按會寫入兩次
+ */
+const POST_TIMEOUT_MS = 45000;
+
 /** POST；GAS 會 302 轉址，必須 follow。不重試——重送有機會寫入兩次 */
 export async function gasPost<T>(body: Record<string, unknown>): Promise<T> {
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     redirect: 'follow',
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(POST_TIMEOUT_MS),
+  }).catch((err: Error) => {
+    // 逾時不代表沒寫進去，請求可能已經送達 Google 那邊了。
+    // 所以訊息是「去確認」而不是「再試一次」——後者會重複寫入
+    if (err.name === 'TimeoutError') throw new Error('等太久了，按同步鈕確認有沒有寫進去');
+    throw err;
   });
 
   const result = await res.json();
