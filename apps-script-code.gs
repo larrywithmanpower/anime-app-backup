@@ -28,6 +28,10 @@ function doGet(e) {
       return response(listAllSheets(ss));
     }
 
+    if (action === "getSettings") {
+      return response(getSettings());
+    }
+
     // 預設抓取資料
     var sheetName = (e && e.parameter && e.parameter.sheet) ? e.parameter.sheet : null;
     return response(getSheetData(ss, sheetName));
@@ -65,6 +69,10 @@ function doPost(e) {
     // 舊版前端相容：只改名稱
     if (data.action === "updateName") {
       return response(updateMeta(ss, data.sheet, data.row, {name: data.name}));
+    }
+
+    if (data.action === "updateSettings") {
+      return response(updateSettings(data));
     }
 
     if (data.action === "deleteAccount") {
@@ -267,6 +275,9 @@ function deleteItem(ss, sheetName, row) {
  */
 
 var CALENDAR_NAME = '追番';
+// 事件說明的開頭標記；刪除時只認這個前綴，絕不動使用者自己建的事件
+var EVENT_MARKER = '追番進度管理自動建立';
+var SETTING_CALENDAR = 'calendarEnabled';
 // E 欄的合法值；舊帳號有不少列是空的或殘留 TRUE/FALSE
 var VALID_STATUS = {watching: true, plan: true, done: true, dropped: true};
 // 提醒時間（當天幾點跳通知）。全天事件的提醒只能綁在午夜，改用定時事件才叫得動
@@ -286,6 +297,92 @@ function getTrackerCalendar() {
 
 function todayStamp() {
   return Utilities.formatDate(new Date(), 'GMT+8', 'yyyy-MM-dd');
+}
+
+function horizonStamp() {
+  var horizon = new Date();
+  horizon.setDate(horizon.getDate() + CALENDAR_DAYS_AHEAD);
+  return Utilities.formatDate(horizon, 'GMT+8', 'yyyy-MM-dd');
+}
+
+/** 行事曆提醒預設關閉；卡片上的下一集本來就夠用，日曆是額外的 */
+function isCalendarEnabled() {
+  return PropertiesService.getScriptProperties().getProperty(SETTING_CALENDAR) === 'true';
+}
+
+function getSettings() {
+  return {calendarEnabled: isCalendarEnabled()};
+}
+
+/**
+ * 切換行事曆提醒。開啟時直接拿 Sheet 既有的 K／L 補寫，不用再打 TVmaze，
+ * 所以很快；關閉時把未來的自動事件清掉，否則「關掉了還是收到提醒」。
+ */
+function updateSettings(data) {
+  var enabled = data.calendarEnabled === true || data.calendarEnabled === 'true';
+  PropertiesService.getScriptProperties().setProperty(SETTING_CALENDAR, enabled ? 'true' : 'false');
+
+  if (enabled) {
+    writeRemindersFromSheet();
+  } else {
+    clearFutureReminders();
+  }
+
+  return {success: true, calendarEnabled: enabled};
+}
+
+/** 依 Sheet 現有的下一集資料補齊提醒，不動 TVmaze */
+function writeRemindersFromSheet() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var calendar = getTrackerCalendar();
+  var today = todayStamp();
+  var horizon = horizonStamp();
+  var sheets = ss.getSheets();
+
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) continue;
+
+    var rows = sheet.getRange(2, 1, lastRow - 1, COLUMN_COUNT).getValues();
+    for (var r = 0; r < rows.length; r++) {
+      var name = String(rows[r][1] || '');
+      var status = String(rows[r][4] || '');
+      if (!VALID_STATUS[status]) status = 'watching';
+      var date = String(rows[r][10] || '').slice(0, 10);
+
+      if (!name || !date) continue;
+      if (status !== 'watching' && status !== 'plan') continue;
+      if (date < today || date > horizon) continue;
+
+      upsertReminder(calendar, name, {date: date, label: String(rows[r][11] || '')});
+    }
+  }
+}
+
+/**
+ * 刪掉今天以後、由本程式建立的提醒。
+ * 只認 EVENT_MARKER 開頭的說明欄，使用者自己加在「追番」日曆上的事件不會被碰到。
+ */
+function clearFutureReminders() {
+  var found = CalendarApp.getCalendarsByName(CALENDAR_NAME);
+  if (!found.length) return 0;
+
+  var from = new Date();
+  var to = new Date();
+  to.setFullYear(to.getFullYear() + 2);
+
+  var events = found[0].getEvents(from, to);
+  var removed = 0;
+  for (var i = 0; i < events.length; i++) {
+    if (String(events[i].getDescription() || '').indexOf(EVENT_MARKER) === 0) {
+      events[i].deleteEvent();
+      removed++;
+    }
+  }
+
+  console.log('已移除 ' + removed + ' 則提醒');
+  return removed;
 }
 
 /** 'YYYY-MM-DD' → 當天 NOTIFY_HOUR 點的 Date（用腳本時區，須設為台北） */
@@ -336,12 +433,12 @@ function fetchNextEpisode(tvmazeId, today) {
  */
 function refreshSchedule() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var calendar = getTrackerCalendar();
   var today = todayStamp();
+  var horizon = horizonStamp();
 
-  var horizon = new Date();
-  horizon.setDate(horizon.getDate() + CALENDAR_DAYS_AHEAD);
-  var horizonStamp = Utilities.formatDate(horizon, 'GMT+8', 'yyyy-MM-dd');
+  // 關閉時仍要回填 K／L（卡片上的下一集照常顯示），只是不碰行事曆。
+  // 也因此不能無條件呼叫 getTrackerCalendar()，否則會憑空建出沒人要的日曆
+  var calendar = isCalendarEnabled() ? getTrackerCalendar() : null;
 
   var sheets = ss.getSheets();
   var checked = 0;
@@ -382,7 +479,7 @@ function refreshSchedule() {
       sheet.getRange(rowIndex, 11).setValue(next ? next.date : '');
       sheet.getRange(rowIndex, 12).setValue(next ? next.label : '');
 
-      if (next && next.date <= horizonStamp) {
+      if (calendar && next && next.date <= horizon) {
         upsertReminder(calendar, name, next);
       }
     }

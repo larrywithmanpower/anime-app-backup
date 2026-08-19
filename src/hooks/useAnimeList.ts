@@ -9,7 +9,7 @@ import {
   parseTotalEpisodes,
 } from '@/types/anime';
 
-const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || '';
+import { APPS_SCRIPT_URL, gasGet, gasPost } from '@/lib/gas';
 
 /** +/- 連按時的合併視窗；一列只會送出最後一次的值 */
 const PROGRESS_DEBOUNCE_MS = 500;
@@ -93,28 +93,6 @@ const parseAirdate = (raw: unknown): string => {
     : parsed.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
 };
 
-/**
- * 讀取整張分頁，失敗時重試一次。
- *
- * GAS 的 exec 端點會間歇性回 404（同一個網址連打五次實測 200/200/200/404/200，
- * 轉址到 script.googleusercontent.com 那一段不穩），不重試的話開 App 有機率
- * 直接落到「顯示上次同步的內容」，看起來就像資料沒更新。
- */
-const fetchSheetRows = async (sheet: string): Promise<unknown> => {
-  const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`;
-
-  for (let attempt = 0; ; attempt++) {
-    try {
-      const res = await fetch(url);
-      const json = await res.json();
-      if (Array.isArray(json) || attempt > 0) return json;
-    } catch (err) {
-      if (attempt > 0) throw err;
-    }
-    await new Promise(resolve => setTimeout(resolve, 800));
-  }
-};
-
 const todayLabel = () =>
   new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
@@ -194,7 +172,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
 
     setRefreshing(true);
     try {
-      const rawData = await fetchSheetRows(sheet);
+      const rawData = await gasGet<unknown>({ sheet }, Array.isArray);
 
       if (Array.isArray(rawData)) {
         const mapped = mapRows(rawData as unknown[][]);
@@ -214,16 +192,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
     }
   };
 
-  const postAction = async (body: Record<string, unknown>) => {
-    const res = await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      redirect: 'follow',
-      body: JSON.stringify(body),
-    });
-    const result = await res.json();
-    if (!res.ok || result?.error) throw new Error(result?.error || `HTTP ${res.status}`);
-    return result;
-  };
+  const postAction = (body: Record<string, unknown>) => gasPost(body);
 
   const handleManualRefresh = () => {
     fetchData();

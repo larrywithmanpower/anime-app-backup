@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Modal, { fieldClass, labelClass } from './Modal';
 import { getGimyDomain, setGimyDomain, DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
+import { fetchCalendarEnabled, saveCalendarEnabled } from '@/lib/calendarSetting';
 
 interface SettingsModalProps {
   currentAccount: string;
@@ -21,6 +22,38 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [domain, setDomain] = useState(getGimyDomain());
   const [saved, setSaved] = useState(false);
+
+  // null = 還沒讀到（設定存在 GAS，不是本機）
+  const [calendarOn, setCalendarOn] = useState<boolean | null>(null);
+  const [calendarBusy, setCalendarBusy] = useState(false);
+  const [calendarError, setCalendarError] = useState('');
+
+  useEffect(() => {
+    let alive = true;
+    fetchCalendarEnabled()
+      .then(value => alive && setCalendarOn(value))
+      .catch(() => alive && setCalendarError('讀不到目前設定'));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const toggleCalendar = async () => {
+    if (calendarOn === null || calendarBusy) return;
+    const next = !calendarOn;
+
+    setCalendarBusy(true);
+    setCalendarError('');
+    try {
+      // 以後端回傳值為準：開啟會補寫提醒、關閉會清掉未來的提醒，都由後端執行
+      setCalendarOn(await saveCalendarEnabled(next));
+    } catch (err) {
+      console.error(err);
+      setCalendarError('切換失敗，請稍後再試');
+    } finally {
+      setCalendarBusy(false);
+    }
+  };
 
   const saveDomain = () => {
     setGimyDomain(domain);
@@ -53,6 +86,37 @@ export default function SettingsModal({
             gimy 換網域時只要改這裡，所有作品的「看」按鈕會自動跟著更新。
             此設定存在這台裝置，換瀏覽器要重設一次。
           </p>
+        </div>
+
+        <div className="border-t border-line pt-4">
+          <button
+            onClick={toggleCalendar}
+            disabled={calendarOn === null || calendarBusy}
+            className="flex w-full items-center gap-3 text-left disabled:opacity-60"
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] text-text">追番行事曆提醒</span>
+              <span className="mt-0.5 block text-[11px] leading-relaxed text-faint">
+                每天 08:00 把近 14 天的更新寫進「追番」日曆。關掉會一併移除未來的提醒；
+                卡片上的更新日期不受影響
+              </span>
+            </span>
+
+            <span
+              className={`relative h-6 w-10 shrink-0 rounded-full transition-colors ${
+                calendarOn ? 'bg-accent' : 'bg-line'
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-[left] ${
+                  calendarOn ? 'left-[18px]' : 'left-0.5'
+                }`}
+              />
+            </span>
+          </button>
+
+          {calendarBusy && <p className="mt-1.5 text-[11px] text-faint">處理中…</p>}
+          {calendarError && <p className="mt-1.5 text-[11px] text-warn">{calendarError}</p>}
         </div>
 
         <div className="border-t border-line pt-4">
