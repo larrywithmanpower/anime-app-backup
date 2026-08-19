@@ -74,6 +74,7 @@ Browser (Next.js static)  ──► Google Apps Script Webhook  ──► Google
    - 關閉時 `clearFutureReminders()` 只刪「追番」日曆上、說明欄以 `EVENT_MARKER` 開頭、且今天之後的事件，手動加的行程動不到
    - 開啟時 `writeRemindersFromSheet()` 直接讀 Sheet 既有的 K / L 欄補寫，不打 TVmaze
    - `refreshSchedule()` 無論開關都會更新 K / L，只有寫日曆那段受開關控制——卡片上的更新日期不該因為關掉提醒而消失
+   - **開關只給 `SettingsModal.tsx` 的 `CALENDAR_OWNER`（`larry`）看得到**：設定是 Script Property（全站一份），`writeRemindersFromSheet` 與 `refreshSchedule` 都是 `ss.getSheets()` 掃全部分頁，寫進去的一律是專案擁有者的「追番」日曆。別的帳號開了只會把別人的作品塞進你的日曆，所以在前端就不給看。GAS 端沒有對應的擋法（實務上只有一個人在用）
 
 ### 前端結構
 

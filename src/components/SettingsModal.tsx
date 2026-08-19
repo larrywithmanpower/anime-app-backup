@@ -5,6 +5,14 @@ import Modal, { fieldClass, labelClass } from './Modal';
 import { getGimyDomain, setGimyDomain, DEFAULT_GIMY_DOMAIN } from '@/lib/watchUrl';
 import { fetchCalendarEnabled, saveCalendarEnabled } from '@/lib/calendarSetting';
 
+/**
+ * 行事曆提醒只開放給這個帳號。
+ *
+ * 開關值是 GAS 的 Script Property（全站一份），寫進去的也是專案擁有者的「追番」日曆，
+ * 不是登入者自己的。別人開了只會污染你的日曆，所以乾脆不給看
+ */
+const CALENDAR_OWNER = 'larry';
+
 interface SettingsModalProps {
   currentAccount: string;
   onLogout: () => void;
@@ -23,12 +31,17 @@ export default function SettingsModal({
   const [domain, setDomain] = useState(getGimyDomain());
   const [saved, setSaved] = useState(false);
 
+  const canUseCalendar = currentAccount === CALENDAR_OWNER;
+
   // null = 還沒讀到（設定存在 GAS，不是本機）
   const [calendarOn, setCalendarOn] = useState<boolean | null>(null);
   const [calendarBusy, setCalendarBusy] = useState(false);
   const [calendarError, setCalendarError] = useState('');
 
   useEffect(() => {
+    // 看不到開關的帳號連讀都不用讀，省一趟 GAS 往返
+    if (!canUseCalendar) return;
+
     let alive = true;
     fetchCalendarEnabled()
       .then(value => alive && setCalendarOn(value))
@@ -36,7 +49,7 @@ export default function SettingsModal({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [canUseCalendar]);
 
   const toggleCalendar = async () => {
     if (calendarOn === null || calendarBusy) return;
@@ -88,6 +101,7 @@ export default function SettingsModal({
           </p>
         </div>
 
+        {canUseCalendar && (
         <div className="border-t border-line pt-4">
           <button
             onClick={toggleCalendar}
@@ -118,6 +132,7 @@ export default function SettingsModal({
           {calendarBusy && <p className="mt-1.5 text-[11px] text-faint">處理中…</p>}
           {calendarError && <p className="mt-1.5 text-[11px] text-warn">{calendarError}</p>}
         </div>
+        )}
 
         <div className="border-t border-line pt-4">
           <p className={labelClass}>帳號</p>
