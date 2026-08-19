@@ -93,6 +93,28 @@ const parseAirdate = (raw: unknown): string => {
     : parsed.toLocaleDateString('sv-SE', { timeZone: 'Asia/Taipei' });
 };
 
+/**
+ * 讀取整張分頁，失敗時重試一次。
+ *
+ * GAS 的 exec 端點會間歇性回 404（同一個網址連打五次實測 200/200/200/404/200，
+ * 轉址到 script.googleusercontent.com 那一段不穩），不重試的話開 App 有機率
+ * 直接落到「顯示上次同步的內容」，看起來就像資料沒更新。
+ */
+const fetchSheetRows = async (sheet: string): Promise<unknown> => {
+  const url = `${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`;
+
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (Array.isArray(json) || attempt > 0) return json;
+    } catch (err) {
+      if (attempt > 0) throw err;
+    }
+    await new Promise(resolve => setTimeout(resolve, 800));
+  }
+};
+
 const todayLabel = () =>
   new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' });
 
@@ -172,8 +194,7 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
 
     setRefreshing(true);
     try {
-      const res = await fetch(`${APPS_SCRIPT_URL}?sheet=${encodeURIComponent(sheet)}`);
-      const rawData = await res.json();
+      const rawData = await fetchSheetRows(sheet);
 
       if (Array.isArray(rawData)) {
         const mapped = mapRows(rawData as unknown[][]);
@@ -181,7 +202,8 @@ export function useAnimeList(currentAccount: string, isLoggedIn: boolean) {
         return mapped;
       }
 
-      pushToast(rawData?.error ? `讀取失敗：${rawData.error}` : '讀取失敗，回應格式不正確');
+      const reason = (rawData as { error?: string })?.error;
+      pushToast(reason ? `讀取失敗：${reason}` : '讀取失敗，回應格式不正確');
       return [];
     } catch (err) {
       console.error(err);
