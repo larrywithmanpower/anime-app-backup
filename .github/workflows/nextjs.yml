@@ -50,10 +50,9 @@ jobs:
           cache: ${{ steps.detect-package-manager.outputs.manager }}
       - name: Setup Pages
         uses: actions/configure-pages@v4
-        with:
-          # Automatically inject basePath in your Next.js config file and disable
-          # server side image optimization (further optimization to next.config.ts)
-          static_site_generator: next
+        # 刻意不帶 static_site_generator: next —— 那個選項會另外生一份 next.config.js
+        # 來注入 basePath，而 .js 的優先級高於我們的 next.config.mjs，會把整份設定
+        # （含 output: 'export'）蓋掉，建置照樣成功但不產出 out/。basePath 我們自己設了
       - name: Install dependencies
         run: ${{ steps.detect-package-manager.outputs.manager }} ${{ steps.detect-package-manager.outputs.command }}
       - name: Build with Next.js
