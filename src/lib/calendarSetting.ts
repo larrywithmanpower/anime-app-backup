@@ -23,6 +23,14 @@ export async function fetchCalendarEnabled(): Promise<boolean> {
 
 /** 回傳後端實際採用的值；開啟會順便補寫提醒、關閉會清掉未來的提醒 */
 export async function saveCalendarEnabled(enabled: boolean): Promise<boolean> {
-  const json = await gasPost<SettingsResponse>({ action: 'updateSettings', calendarEnabled: enabled });
-  return json?.calendarEnabled === true;
+  try {
+    const json = await gasPost<SettingsResponse>({ action: 'updateSettings', calendarEnabled: enabled });
+    if (typeof json?.calendarEnabled === 'boolean') return json.calendarEnabled;
+  } catch {
+    // exec 端點間歇性回 404，掛的是最後轉址那一段，後端其實已經跑完了。
+    // 直接報失敗會騙人（畫面說沒存、行事曆已經改了）
+  }
+
+  // 這個 action 冪等，回頭讀一次真實狀態，比重送 POST 安全
+  return fetchCalendarEnabled();
 }
